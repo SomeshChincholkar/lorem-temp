@@ -23,8 +23,8 @@ PRIMARY_MCP_URL = os.getenv("PRIMARY_MCP_URL", "http://localhost:8200/clinicalto
 # treats as the authorized root (the one clinical_watcher_tool /
 # clinical_data_harvester_tool call ctx.list_roots() to discover).
 # Set INPUT_ROOT_DIR in .env if your folder isn't "data/input".
-INPUT_ROOT_DIR = Path(os.getenv("INPUT_ROOT_DIR")).resolve()
-# print("hi ",INPUT_ROOT_DIR)
+INPUT_ROOT_DIR = Path(os.getenv("INPUT_ROOT_DIR", "data/input")).resolve()
+
 
 async def _list_roots_callback(context):
     """
@@ -61,9 +61,22 @@ async def mcp_session(url: str = PRIMARY_MCP_URL, sampling_callback=None):
             yield session
 
 
-async def call_tool(tool_name: str, arguments: dict, url: str = PRIMARY_MCP_URL) -> dict:
-    """Call an MCP tool and return its parsed JSON/dict result."""
-    async with mcp_session(url) as session:
+async def call_tool(
+    tool_name: str,
+    arguments: dict,
+    url: str = PRIMARY_MCP_URL,
+    sampling_callback=None,
+) -> dict:
+    """
+    Call an MCP tool and return its parsed JSON/dict result.
+
+    sampling_callback: pass this when the tool you're calling issues a
+    server-side ctx.session.create_message() request (the Sampling
+    primitive) that needs fulfilling on the client side -- e.g. the
+    Normalizer Agent's medical_lang_bridge_tool call. Leave it None
+    for tools that don't use Sampling (Harvester, etc.).
+    """
+    async with mcp_session(url, sampling_callback=sampling_callback) as session:
         result = await session.call_tool(tool_name, arguments=arguments)
         return _unwrap_tool_result(result)
 
