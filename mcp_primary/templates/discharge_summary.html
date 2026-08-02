@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Discharge Summary - {{patient_name}}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; color: #222; }
+    h1 { border-bottom: 2px solid #333; padding-bottom: 8px; }
+    .risk-low { color: #1a7f37; font-weight: bold; }
+    .risk-medium { color: #b08800; font-weight: bold; }
+    .risk-high { color: #c1121f; font-weight: bold; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #f2f2f2; }
+  </style>
+</head>
+<body>
+  <h1>Discharge Summary</h1>
+  <p><strong>Patient ID:</strong> {{patient_id}}</p>
+  <p><strong>Patient Name:</strong> {{patient_name}}</p>
+  <p><strong>Diagnosis:</strong> {{discharge_diagnosis}}</p>
+  <p><strong>Risk Level:</strong> <span class="risk-{{risk_level_lower}}">{{risk_level}}</span></p>
+  <p><strong>Recommendation:</strong> {{recommendation}}</p>
+
+  <h2>Cross-Validation Findings</h2>
+  <table>
+    <tr><th>Rule</th><th>Severity</th><th>Triggered</th><th>Evidence</th></tr>
+    {{findings_rows}}
+  </table>
+
+  <h2>Follow-up Instructions</h2>
+  <p>{{follow_up_instructions}}</p>
+</body>
+</html>

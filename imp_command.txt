@@ -1,0 +1,10 @@
+python -m uvicorn mock_ehr.main:app --port 8050
+python -m pip install -r requirements.txt
+
+npx @modexcontextprotocol/inspector
+
+# To execute LG-5.1
+curl.exe -X POST http://localhost:8100/ `
+  -H "Content-Type: application/json" `
+  -H "X-Agent-Auth-Token: ecd6eb9e2b13e6638c8aa710c65d06264a8f29ec157b6504" `
+  --data "@request.json"

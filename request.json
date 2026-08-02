@@ -1,0 +1,21 @@
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "method": "message/send",
+  "params": {
+    "message": {
+      "role": "user",
+      "parts": [
+        {
+          "kind": "data",
+          "data": {
+            "patient_id": "P1023",
+            "doc_type": "bill",
+            "language": "en"
+          }
+        }
+      ],
+      "messageId": "test-msg-1"
+    }
+  }
+}

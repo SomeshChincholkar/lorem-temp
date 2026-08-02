@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Discharge Summary - John Smith</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; color: #222; }
+    h1 { border-bottom: 2px solid #333; padding-bottom: 8px; }
+    .risk-low { color: #1a7f37; font-weight: bold; }
+    .risk-medium { color: #b08800; font-weight: bold; }
+    .risk-high { color: #c1121f; font-weight: bold; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #f2f2f2; }
+  </style>
+</head>
+<body>
+  <h1>Discharge Summary</h1>
+  <p><strong>Patient ID:</strong> P1001</p>
+  <p><strong>Patient Name:</strong> John Smith</p>
+  <p><strong>Diagnosis:</strong> Acute Myocardial Infarction</p>
+  <p><strong>Risk Level:</strong> <span class="risk-low">LOW</span></p>
+  <p><strong>Recommendation:</strong> Approve — Auto-release</p>
+
+  <h2>Cross-Validation Findings</h2>
+  <table>
+    <tr><th>Rule</th><th>Severity</th><th>Triggered</th><th>Evidence</th></tr>
+    <tr><td>med_omission_check</td><td>Warning</td><td>No</td><td>OK</td></tr>
+<tr><td>allergy_contradiction_check</td><td>Critical</td><td>No</td><td>OK</td></tr>
+<tr><td>diagnosis_mismatch_check</td><td>Warning</td><td>No</td><td>OK</td></tr>
+<tr><td>follow_up_missing_check</td><td>Critical</td><td>No</td><td>OK</td></tr>
+<tr><td>lab_follow_up_mismatch_check</td><td>Warning</td><td>No</td><td>OK</td></tr>
+<tr><td>discharge_approval_check</td><td>Critical</td><td>No</td><td>OK</td></tr>
+<tr><td>bill_settlement_check</td><td>Critical</td><td>No</td><td>OK</td></tr>
+  </table>
+
+  <h2>Follow-up Instructions</h2>
+  <p>Continue Aspirin, Atorvastatin, Metoprolol. Troponin-I remains elevated, continue ACS management. LDL Cholesterol elevated, continue high-intensity statin therapy.</p>
+</body>
+</html>

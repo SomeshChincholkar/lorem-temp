@@ -1,0 +1,68 @@
+{
+  "patient_id": "P1001",
+  "patient_name": "John Smith",
+  "generated_at": "2026-08-02T08:51:01.287235+00:00",
+  "risk_score": 0,
+  "risk_level": "low",
+  "recommendation": "Approve \u2014 Auto-release",
+  "discharge_blocked": false,
+  "completeness": {
+    "missing_blocking": [],
+    "missing_nonblocking": []
+  },
+  "ehr_findings": [
+    {
+      "rule_id": "med_omission_check",
+      "severity": "Warning",
+      "triggered": false,
+      "evidence": "OK",
+      "action": "OK"
+    },
+    {
+      "rule_id": "allergy_contradiction_check",
+      "severity": "Critical",
+      "triggered": false,
+      "evidence": "OK",
+      "action": "OK"
+    },
+    {
+      "rule_id": "diagnosis_mismatch_check",
+      "severity": "Warning",
+      "triggered": false,
+      "evidence": "OK",
+      "action": "OK"
+    },
+    {
+      "rule_id": "follow_up_missing_check",
+      "severity": "Critical",
+      "triggered": false,
+      "evidence": "OK",
+      "action": "OK"
+    },
+    {
+      "rule_id": "lab_follow_up_mismatch_check",
+      "severity": "Warning",
+      "triggered": false,
+      "evidence": "OK",
+      "action": "OK"
+    },
+    {
+      "rule_id": "discharge_approval_check",
+      "severity": "Critical",
+      "triggered": false,
+      "evidence": "OK",
+      "action": "OK"
+    },
+    {
+      "rule_id": "bill_settlement_check",
+      "severity": "Critical",
+      "triggered": false,
+      "evidence": "OK",
+      "action": "OK"
+    }
+  ],
+  "translation_confidence": 1,
+  "rules_version": "b6650b6403a9ca88d5e6e143d0a72d283ee2edc8ab4bab3bfb91955a227d96a3",
+  "discharge_diagnosis": "Acute Myocardial Infarction",
+  "follow_up_instructions": "Continue Aspirin, Atorvastatin, Metoprolol. Troponin-I remains elevated, continue ACS management. LDL Cholesterol elevated, continue high-intensity statin therapy."
+}
