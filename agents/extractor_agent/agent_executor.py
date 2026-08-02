@@ -54,7 +54,6 @@ class ExtractorAgentExecutor(AgentExecutor):
             initial_state = {
                 "patient_id": payload["patient_id"],
                 "doc_type": payload["doc_type"],
-                "language": payload.get("language", "en"),
                 "trace_id": payload.get("trace_id") or str(uuid4()),
             }
         except KeyError as e:
@@ -75,6 +74,7 @@ class ExtractorAgentExecutor(AgentExecutor):
         artifact_data = {
             "patient_id": final_state["patient_id"],
             "doc_type": final_state["doc_type"],
+            "language": final_state.get("language"),
             "extracted_fields": final_state.get("extracted_fields", {}),
             "trace_id": initial_state["trace_id"],
         }

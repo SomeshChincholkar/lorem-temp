@@ -67,23 +67,91 @@ DOC_TYPE_FIELD_SCHEMAS = {
 # ---------------------------------------------------------------------
 # Prompt functions
 # ---------------------------------------------------------------------
+# def discharge_extraction_prompt(language: str = "en", doc_types: str = "discharge_report") -> str:
+#     """
+#     discharge-extraction-prompt
+#     Used by: Clinical Extractor Agent
+
+#     doc_types: comma-separated string, e.g. "discharge_report,prescription"
+#     (kept as a plain string, not list[str], so MCP clients with
+#     text-only argument inputs -- like the Inspector -- can call this
+#     prompt directly without needing JSON-array support.)
+
+#     NOTE: this prompt is extraction-only. Translation and abbreviation
+#     normalization are the Clinical Normalizer Agent's job (see
+#     abbreviation_normalization_prompt below) -- the Extractor Agent
+#     must never translate field values, per spec sections 2.2 vs 2.3.
+#     """
+#     doc_type_list = [dt.strip() for dt in doc_types.split(",") if dt.strip()]
+
+#     schema_lines = []
+#     for dt in doc_type_list:
+#         schema = DOC_TYPE_FIELD_SCHEMAS.get(dt)
+#         if not schema:
+#             schema_lines.append(f"- {dt}: (no schema defined)")
+#             continue
+#         schema_lines.append(
+#             f"- {dt}:\n"
+#             f"    all_fields: {json.dumps(schema['required'])}\n"
+#             f"    blocking_if_missing: {json.dumps(schema['blocking'])}"
+#         )
+#     schema_block = "\n".join(schema_lines)
+
+#     return f"""You are a clinical data extraction assistant.
+
+# The source document(s) are written in language code "{language}".
+
+# IMPORTANT: Extract every field value EXACTLY as it appears in the
+# source text, in its original language -- do NOT translate anything
+# into English. Translation and medical-abbreviation normalization are
+# handled downstream by a separate Clinical Normalizer Agent; your only
+# job here is faithful structured extraction from the source text as-is.
+
+# Extract structured fields for each of the following document type(s).
+# Per Table 3 (completeness validation fields), each type lists its full
+# field set and, separately, the subset that is BLOCKING if missing --
+# meaning discharge summary auto-generation cannot proceed and the case
+# must go to human-in-the-loop review:
+# {schema_block}
+
+# Rules:
+# - Return ONLY valid JSON, no prose, no markdown code fences.
+# - Do NOT translate any field value. Copy text fields verbatim from the
+#   source, in the source language, even if it is not English.
+# - If a field is not present in the source text, set its value to null
+#   -- do not guess or fabricate values.
+# - For list-type fields (medications, tests, line_items), return a JSON
+#   array of objects even if there is only one item. Each medication
+#   object should itself follow the "prescription" field schema above.
+# - Preserve dates in ISO 8601 format (YYYY-MM-DD) where possible --
+#   this is a format normalization, not a translation, so apply it
+#   regardless of source language.
+# - Explicitly report which blocking fields (if any) came back null, in
+#   a top-level "missing_blocking_fields" array, so downstream validation
+#   doesn't have to re-derive it.
+# - Output shape per document:
+#   {{"doc_type": <str>, "fields": {{...}}, "missing_blocking_fields": [<str>, ...]}}
+#   If multiple documents were provided, wrap as:
+#   {{"documents": [{{"doc_type": ..., "fields": {{...}}, "missing_blocking_fields": [...]}}, ...]}}
+# """
+
 def discharge_extraction_prompt(language: str = "en", doc_types: str = "discharge_report") -> str:
     """
     discharge-extraction-prompt
     Used by: Clinical Extractor Agent
-
+ 
     doc_types: comma-separated string, e.g. "discharge_report,prescription"
     (kept as a plain string, not list[str], so MCP clients with
     text-only argument inputs -- like the Inspector -- can call this
     prompt directly without needing JSON-array support.)
-
+ 
     NOTE: this prompt is extraction-only. Translation and abbreviation
     normalization are the Clinical Normalizer Agent's job (see
     abbreviation_normalization_prompt below) -- the Extractor Agent
     must never translate field values, per spec sections 2.2 vs 2.3.
     """
     doc_type_list = [dt.strip() for dt in doc_types.split(",") if dt.strip()]
-
+ 
     schema_lines = []
     for dt in doc_type_list:
         schema = DOC_TYPE_FIELD_SCHEMAS.get(dt)
@@ -96,24 +164,24 @@ def discharge_extraction_prompt(language: str = "en", doc_types: str = "discharg
             f"    blocking_if_missing: {json.dumps(schema['blocking'])}"
         )
     schema_block = "\n".join(schema_lines)
-
+ 
     return f"""You are a clinical data extraction assistant.
-
+ 
 The source document(s) are written in language code "{language}".
-
+ 
 IMPORTANT: Extract every field value EXACTLY as it appears in the
 source text, in its original language -- do NOT translate anything
 into English. Translation and medical-abbreviation normalization are
 handled downstream by a separate Clinical Normalizer Agent; your only
 job here is faithful structured extraction from the source text as-is.
-
+ 
 Extract structured fields for each of the following document type(s).
 Per Table 3 (completeness validation fields), each type lists its full
 field set and, separately, the subset that is BLOCKING if missing --
 meaning discharge summary auto-generation cannot proceed and the case
 must go to human-in-the-loop review:
 {schema_block}
-
+ 
 Rules:
 - Return ONLY valid JSON, no prose, no markdown code fences.
 - Do NOT translate any field value. Copy text fields verbatim from the
@@ -129,12 +197,24 @@ Rules:
 - Explicitly report which blocking fields (if any) came back null, in
   a top-level "missing_blocking_fields" array, so downstream validation
   doesn't have to re-derive it.
-- Output shape per document:
-  {{"doc_type": <str>, "fields": {{...}}, "missing_blocking_fields": [<str>, ...]}}
-  If multiple documents were provided, wrap as:
-  {{"documents": [{{"doc_type": ..., "fields": {{...}}, "missing_blocking_fields": [...]}}, ...]}}
+- Output shape for a single document -- this is a real, complete
+  example (using "bill" purely to illustrate the shape; use the
+  actual field names from the schema above for whatever doc_type you
+  were asked to extract):
+  {{
+    "doc_type": "bill",
+    "fields": {{
+      "patient_id": "P1001",
+      "total_amount": 450.0,
+      "payment_status": "PAID"
+    }},
+    "missing_blocking_fields": []
+  }}
+- If more than one document type was requested, return one top-level
+  object with a "documents" key holding an array of objects, where
+  each array element has that exact same three-key shape
+  (doc_type / fields / missing_blocking_fields) shown above.
 """
-
 
 def ehr_cross_validation_prompt(patient_id: str) -> str:
     """

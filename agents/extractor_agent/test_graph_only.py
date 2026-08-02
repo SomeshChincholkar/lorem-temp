@@ -20,13 +20,15 @@ async def main():
     patient_id = sys.argv[1] if len(sys.argv) > 1 else "P1001"
     doc_type = sys.argv[2] if len(sys.argv) > 2 else "doctor_reports"
 
-    initial_state = {"patient_id": patient_id, "doc_type": doc_type, "language": "en"}
+    initial_state = {"patient_id": patient_id, "doc_type": doc_type}
     final_state = await extractor_app.ainvoke(
         initial_state, config={"configurable": {"thread_id": "debug-run"}}
     )
 
     print("---- RAW TEXT (first 300 chars) ----")
     print(final_state.get("raw_text", "")[:300])
+
+    print(f"\n---- DETECTED LANGUAGE: {final_state.get('language')} ----")
 
     print("\n---- EXTRACTED FIELDS ----")
     print(json.dumps(final_state.get("extracted_fields", {}), indent=2))

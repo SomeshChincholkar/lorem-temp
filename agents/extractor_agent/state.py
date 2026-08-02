@@ -11,7 +11,9 @@ class ExtractorState(TypedDict, total=False):
     patient_id: str
     doc_type: str            # "doctor_reports" | "lab_reports" | "bills"
                               # (matches Clinical Watcher Tool's folder names)
-    language: str             # source language code, default "en"
+    language: str              # source language -- set ONLY by
+                                # node_detect_language from raw_text.
+                                # Never supplied by the caller.
     raw_text: str
     prompt: str
     extracted_fields: dict

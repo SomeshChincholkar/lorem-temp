@@ -8,18 +8,20 @@ Builds and compiles the Clinical Extractor Agent's StateGraph:
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
-from .nodes import node_build_prompt, node_extract, node_harvest
+from .nodes import node_build_prompt, node_detect_language, node_extract, node_harvest
 from .state import ExtractorState
 
 
 def build_graph():
     graph = StateGraph(ExtractorState)
     graph.add_node("harvest", node_harvest)
+    graph.add_node("detect_language", node_detect_language)
     graph.add_node("build_prompt", node_build_prompt)
     graph.add_node("extract", node_extract)
 
     graph.set_entry_point("harvest")
-    graph.add_edge("harvest", "build_prompt")
+    graph.add_edge("harvest", "detect_language")
+    graph.add_edge("detect_language", "build_prompt")
     graph.add_edge("build_prompt", "extract")
     graph.add_edge("extract", END)
 
