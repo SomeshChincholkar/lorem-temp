@@ -22,8 +22,8 @@ PRIMARY_MCP_URL = os.getenv("PRIMARY_MCP_URL", "http://localhost:8200/clinicalto
 # Must match the same folder your Module 3 roots.py / Watcher tool
 # treats as the authorized root (the one clinical_watcher_tool /
 # clinical_data_harvester_tool call ctx.list_roots() to discover).
-# Set INPUT_ROOT_DIR in .env if your folder isn't "data/input".
-INPUT_ROOT_DIR = Path(os.getenv("INPUT_ROOT_DIR", "data/input")).resolve()
+# Override with INPUT_ROOT_DIR in .env if your folder isn't "Data/incoming".
+INPUT_ROOT_DIR = Path(os.getenv("INPUT_ROOT_DIR", "Data/incoming")).resolve()
 
 
 async def _list_roots_callback(context):
@@ -36,13 +36,23 @@ async def _list_roots_callback(context):
 
 
 @asynccontextmanager
-async def mcp_session(url: str = PRIMARY_MCP_URL, sampling_callback=None):
+async def mcp_session(
+    url: str = PRIMARY_MCP_URL,
+    sampling_callback=None,
+    elicitation_callback=None,
+):
     """
     Open a fresh MCP ClientSession for one call (or one graph run).
 
     sampling_callback: only the Normalizer agent needs to pass one --
     it's the handler that the *server's* ctx.session.create_message()
     call (inside medical_lang_bridge_tool) routes into.
+
+    elicitation_callback: only the Validator agent needs to pass one --
+    the handler that the server's ctx.elicit() call (inside
+    clinical_rules_engine_tool) routes into. Without it the SDK replies
+    "elicitation not supported" and the Rules Engine can never ask a
+    human for missing non-blocking fields.
 
     list_roots_callback: always registered, since both the Harvester
     and Watcher tools call ctx.list_roots() server-side (spec section
@@ -55,6 +65,7 @@ async def mcp_session(url: str = PRIMARY_MCP_URL, sampling_callback=None):
             read,
             write,
             sampling_callback=sampling_callback,
+            elicitation_callback=elicitation_callback,
             list_roots_callback=_list_roots_callback,
         ) as session:
             await session.initialize()
@@ -66,6 +77,7 @@ async def call_tool(
     arguments: dict,
     url: str = PRIMARY_MCP_URL,
     sampling_callback=None,
+    elicitation_callback=None,
 ) -> dict:
     """
     Call an MCP tool and return its parsed JSON/dict result.
@@ -75,8 +87,16 @@ async def call_tool(
     primitive) that needs fulfilling on the client side -- e.g. the
     Normalizer Agent's medical_lang_bridge_tool call. Leave it None
     for tools that don't use Sampling (Harvester, etc.).
+
+    elicitation_callback: likewise for tools that call ctx.elicit()
+    (the Elicitation primitive) -- i.e. clinical_rules_engine_tool,
+    called by the Validator Agent.
     """
-    async with mcp_session(url, sampling_callback=sampling_callback) as session:
+    async with mcp_session(
+        url,
+        sampling_callback=sampling_callback,
+        elicitation_callback=elicitation_callback,
+    ) as session:
         result = await session.call_tool(tool_name, arguments=arguments)
         return _unwrap_tool_result(result)
 

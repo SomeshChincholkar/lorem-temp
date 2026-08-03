@@ -1,0 +1,112 @@
+{
+  "bill_id": "BILL-2026-1015",
+  "patient_id": "P1015",
+  "patient_name": "अनन्या शर्मा",
+  "issue_date": "2026-06-08",
+  "due_date": "2026-07-08",
+  "currency": "INR",
+  "payment_status": "PAID",
+  "payment_method": "Insurance",
+  "notes": "बीमा दावा स्वीकृत। शेष राशि छुट्टी के समय प्राप्त हुई। पूर्ण रूप से निपटान किया गया।",
+  "line_items": [
+    {
+      "item_code": "ROOM-WARD",
+      "description": "वार्ड बेड (6 रातें)",
+      "qty": 6,
+      "unit_price": 2200.0,
+      "total": 13200.0
+    },
+    {
+      "item_code": "PHARM-AZIT",
+      "description": "एज़िथ्रोमाइसिन 500 मि.ग्रा., 7 गोलियाँ",
+      "qty": 7,
+      "unit_price": 24.0,
+      "total": 168.0
+    },
+    {
+      "item_code": "PHARM-PARA",
+      "description": "पैरासिटामोल 500 मि.ग्रा., 20 गोलियाँ",
+      "qty": 20,
+      "unit_price": 2.5,
+      "total": 50.0
+    },
+    {
+      "item_code": "LAB-WIDAL",
+      "description": "विडाल टेस्ट + संपूर्ण रक्त गणना",
+      "qty": 1,
+      "unit_price": 850.0,
+      "total": 850.0
+    },
+    {
+      "item_code": "PROF-MD",
+      "description": "उपचार करने वाले चिकित्सक का शुल्क",
+      "qty": 1,
+      "unit_price": 4500.0,
+      "total": 4500.0
+    }
+  ],
+  "subtotal": 18768.0,
+  "tax": 938.4,
+  "total_amount": 19706.4,
+  "language": "hi",
+  "bill_title": "अस्पताल बिल — शुल्क विवरण",
+  "vendor_name": "सेंट मैरियन क्षेत्रीय चिकित्सा केंद्र",
+  "labels": {
+    "bill_id": "बिल आईडी",
+    "patient_id": "रोगी आईडी",
+    "patient_name": "रोगी का नाम",
+    "issue_date": "जारी करने की तिथि",
+    "due_date": "देय तिथि",
+    "currency": "मुद्रा",
+    "item_code": "कोड",
+    "description": "विवरण",
+    "qty": "मात्रा",
+    "unit_price": "इकाई मूल्य",
+    "total": "कुल",
+    "subtotal": "उप-योग",
+    "tax": "कर",
+    "total_due": "कुल देय",
+    "payment_status": "भुगतान स्थिति",
+    "payment_method": "भुगतान का तरीका",
+    "notes": "टिप्पणियाँ"
+  },
+  "payment_status_label": "भुगतान किया गया",
+  "footer": "आपके भुगतान के लिए धन्यवाद। यह रसीद पुष्टि करती है कि उपरोक्त शुल्क पूर्ण रूप से चुका दिए गए हैं। कृपया इस दस्तावेज़ को अपने रिकॉर्ड के लिए सुरक्षित रखें।",
+  "line_items_en": [
+    {
+      "item_code": "ROOM-WARD",
+      "description": "Ward bed (6 nights)",
+      "qty": 6,
+      "unit_price": 2200.0,
+      "total": 13200.0
+    },
+    {
+      "item_code": "PHARM-AZIT",
+      "description": "Azithromycin 500 mg, 7 tabs",
+      "qty": 7,
+      "unit_price": 24.0,
+      "total": 168.0
+    },
+    {
+      "item_code": "PHARM-PARA",
+      "description": "Paracetamol 500 mg, 20 tabs",
+      "qty": 20,
+      "unit_price": 2.5,
+      "total": 50.0
+    },
+    {
+      "item_code": "LAB-WIDAL",
+      "description": "Widal test + complete blood count",
+      "qty": 1,
+      "unit_price": 850.0,
+      "total": 850.0
+    },
+    {
+      "item_code": "PROF-MD",
+      "description": "Attending physician fee",
+      "qty": 1,
+      "unit_price": 4500.0,
+      "total": 4500.0
+    }
+  ]
+}

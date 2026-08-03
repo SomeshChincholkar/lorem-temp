@@ -1,0 +1,126 @@
+{
+  "bill_id": "BILL-2026-1014",
+  "patient_id": "P1014",
+  "patient_name": "Lucía Fernández",
+  "issue_date": "2026-06-06",
+  "due_date": "2026-07-06",
+  "currency": "EUR",
+  "payment_status": "PAID",
+  "payment_method": "Seguro médico",
+  "notes": "Autorización del seguro confirmada. Copago abonado en el momento del alta. Liquidado en su totalidad.",
+  "line_items": [
+    {
+      "item_code": "ROOM-WARD",
+      "description": "Cama de hospitalización (3 noches)",
+      "qty": 3,
+      "unit_price": 240.0,
+      "total": 720.0
+    },
+    {
+      "item_code": "IV-FLUID",
+      "description": "Sueroterapia de rehidratación intravenosa",
+      "qty": 3,
+      "unit_price": 28.0,
+      "total": 84.0
+    },
+    {
+      "item_code": "PHARM-ONDA",
+      "description": "Ondansetrón 4 mg, 15 comprimidos",
+      "qty": 15,
+      "unit_price": 0.45,
+      "total": 6.75
+    },
+    {
+      "item_code": "PHARM-PARA",
+      "description": "Paracetamol 500 mg, 20 comprimidos",
+      "qty": 20,
+      "unit_price": 0.08,
+      "total": 1.6
+    },
+    {
+      "item_code": "LAB-ELEC",
+      "description": "Panel de electrolitos y función renal",
+      "qty": 1,
+      "unit_price": 55.0,
+      "total": 55.0
+    },
+    {
+      "item_code": "PROF-MD",
+      "description": "Honorarios del médico responsable",
+      "qty": 1,
+      "unit_price": 480.0,
+      "total": 480.0
+    }
+  ],
+  "subtotal": 1347.35,
+  "tax": 282.94,
+  "total_amount": 1630.29,
+  "language": "es",
+  "bill_title": "Factura hospitalaria — Detalle de cargos",
+  "vendor_name": "Centro Médico Regional St. Marian",
+  "labels": {
+    "bill_id": "N.º de factura",
+    "patient_id": "ID del paciente",
+    "patient_name": "Nombre del paciente",
+    "issue_date": "Fecha de emisión",
+    "due_date": "Fecha de vencimiento",
+    "currency": "Moneda",
+    "item_code": "Código",
+    "description": "Descripción",
+    "qty": "Cantidad",
+    "unit_price": "Precio unitario",
+    "total": "Total",
+    "subtotal": "Subtotal",
+    "tax": "IVA",
+    "total_due": "TOTAL A PAGAR",
+    "payment_status": "Estado del pago",
+    "payment_method": "Método de pago",
+    "notes": "Observaciones"
+  },
+  "payment_status_label": "PAGADO",
+  "footer": "Gracias por su pago. Este recibo confirma que los cargos indicados han sido liquidados en su totalidad. Conserve este documento para sus registros.",
+  "line_items_en": [
+    {
+      "item_code": "ROOM-WARD",
+      "description": "Ward bed (3 nights)",
+      "qty": 3,
+      "unit_price": 240.0,
+      "total": 720.0
+    },
+    {
+      "item_code": "IV-FLUID",
+      "description": "Intravenous rehydration therapy",
+      "qty": 3,
+      "unit_price": 28.0,
+      "total": 84.0
+    },
+    {
+      "item_code": "PHARM-ONDA",
+      "description": "Ondansetron 4 mg, 15 tabs",
+      "qty": 15,
+      "unit_price": 0.45,
+      "total": 6.75
+    },
+    {
+      "item_code": "PHARM-PARA",
+      "description": "Paracetamol 500 mg, 20 tabs",
+      "qty": 20,
+      "unit_price": 0.08,
+      "total": 1.6
+    },
+    {
+      "item_code": "LAB-ELEC",
+      "description": "Electrolyte and renal function panel",
+      "qty": 1,
+      "unit_price": 55.0,
+      "total": 55.0
+    },
+    {
+      "item_code": "PROF-MD",
+      "description": "Attending physician fee",
+      "qty": 1,
+      "unit_price": 480.0,
+      "total": 480.0
+    }
+  ]
+}
