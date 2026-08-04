@@ -7,8 +7,13 @@ Expected inbound message shape (a single DataPart):
     {"patient_id": "P1019",
      "extracted_discharge": {...},          # Table 3 discharge fields
      "extracted_bill": {...},               # Table 3 bill fields
+     "extracted_lab": {...},                # Table 3 lab fields
      "translation_confidence": 0.93,        # optional, from the Normalizer
      "trace_id": "<optional>"}
+
+All three extracted_* dicts are persisted into the audit report, which
+is the only thing downstream reads -- the Summary Generator and the
+dashboard's medication tables build from them.
 """
 
 from uuid import uuid4
@@ -19,12 +24,15 @@ from a2a.server.tasks import TaskUpdater
 from a2a.types import DataPart, Part, TaskState
 from a2a.utils import get_data_parts, new_agent_text_message, new_task
 
+from agents.common.a2a_server import traced_agent
+
 from .graph import validator_app
 
 
 class ValidatorAgentExecutor(AgentExecutor):
     """AgentExecutor implementation for the Clinical Validation Agent."""
 
+    @traced_agent("validator")
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         task = context.current_task or new_task(context.message)
         if not context.current_task:
@@ -59,6 +67,7 @@ class ValidatorAgentExecutor(AgentExecutor):
             "patient_id": payload["patient_id"],
             "extracted_discharge": payload.get("extracted_discharge") or {},
             "extracted_bill": payload.get("extracted_bill") or {},
+            "extracted_lab": payload.get("extracted_lab") or {},
             "translation_confidence": payload.get("translation_confidence"),
             "trace_id": payload.get("trace_id") or str(uuid4()),
         }

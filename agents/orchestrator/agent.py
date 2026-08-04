@@ -34,19 +34,29 @@ async def process_patient_discharge(patient_id: str) -> dict:
     return await run_discharge_pipeline(patient_id)
 
 
-async def ask_about_records(question: str, patient_id: str = "") -> dict:
-    """Ask the Clinical RAG Q&A agent a question about patient records.
+async def ask_about_records(question: str, patient_id: str) -> dict:
+    """Ask the Clinical RAG Q&A agent about one patient's records.
 
     Args:
         question: the administrator's question.
-        patient_id: optional, restricts retrieval to one patient.
+        patient_id: REQUIRED. Each patient has their own index, so a
+            question with no patient has nothing to search.
 
     Returns:
         The grounded answer, its sources, and RAG Triad quality scores.
     """
+    if not patient_id:
+        return {
+            "answer": (
+                "A patient ID is required — this assistant answers from one "
+                "patient's records at a time."
+            ),
+            "error": "patient_id is required",
+        }
+
     result = await send_message(
         "rag",
-        {"question": question, "patient_filter": patient_id or None},
+        {"question": question, "patient_id": patient_id},
     )
     if result["ok"] and result["artifacts"]:
         return result["artifacts"][-1]
@@ -77,7 +87,10 @@ orchestrator_agent = LlmAgent(
     instruction=(
         "You coordinate a hospital discharge review system.\n"
         "- To review a patient, call process_patient_discharge with their ID.\n"
-        "- To answer a question about records, call ask_about_records.\n"
+        "- To answer a question about records, call ask_about_records. It "
+        "always needs a patient ID: records are indexed per patient, so "
+        "there is no way to answer a question that does not name one. If "
+        "the user hasn't said which patient, ask them.\n"
         "- To report system status, call check_agent_health.\n"
         "Always state the risk level, the recommendation, and whether a "
         "human reviewer is required. Never tell a user a discharge is "

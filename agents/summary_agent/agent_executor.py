@@ -24,12 +24,21 @@ from a2a.server.tasks import TaskUpdater
 from a2a.types import DataPart, Part, TaskState, TextPart
 from a2a.utils import get_data_parts, new_agent_text_message, new_task
 
-from .sections import SECTION_ORDER, build_base_prompt, load_report, stream_section
+from agents.common.a2a_server import traced_agent
+
+from .sections import (
+    SECTION_ORDER,
+    build_base_prompt,
+    load_report,
+    screen_section,
+    stream_section,
+)
 
 
 class SummaryAgentExecutor(AgentExecutor):
     """AgentExecutor implementation for the Discharge Summary Generator."""
 
+    @traced_agent("summary_generator")
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         task = context.current_task or new_task(context.message)
         if not context.current_task:
@@ -65,6 +74,7 @@ class SummaryAgentExecutor(AgentExecutor):
             return
 
         sections: dict[str, str] = {}
+        guardrail_events: list[dict] = []
 
         for index, section in enumerate(SECTION_ORDER):
             await updater.update_status(
@@ -83,15 +93,34 @@ class SummaryAgentExecutor(AgentExecutor):
                 # summary -- record it and keep going.
                 chunks = [f"(This section could not be generated: {exc})"]
 
-            text = "".join(chunks).strip()
+            # Toxicity guardrail runs before the section is emitted --
+            # once a chunk is on the wire the patient has already seen it.
+            screened = screen_section("".join(chunks).strip())
+            text = screened["text"]
             sections[section] = text
+
+            if screened["verdict"] != "safe":
+                guardrail_events.append(
+                    {
+                        "guardrail": "ToxicityFilter",
+                        "section": section,
+                        "verdict": screened["verdict"],
+                        "categories": screened["categories"],
+                        "matches": screened["matches"],
+                    }
+                )
 
             # Emit this section the moment it's ready -- this is the
             # progressive delivery the spec asks for.
             await updater.add_artifact(
                 [Part(root=TextPart(text=text))],
                 name=f"section-{section}",
-                metadata={"section": section, "order": index, "trace_id": trace_id},
+                metadata={
+                    "section": section,
+                    "order": index,
+                    "trace_id": trace_id,
+                    "toxicity_verdict": screened["verdict"],
+                },
                 last_chunk=True,
             )
 
@@ -104,6 +133,7 @@ class SummaryAgentExecutor(AgentExecutor):
                             "risk_level": risk_level,
                             "audience": audience,
                             "sections": sections,
+                            "guardrail_events": guardrail_events,
                             "trace_id": trace_id,
                         }
                     )

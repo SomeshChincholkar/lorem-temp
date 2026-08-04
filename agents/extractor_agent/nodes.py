@@ -9,8 +9,9 @@ prompt: discharge-extraction-prompt) and the Bedrock LLM.
 """
 
 from agents.common.language_detect import detect_language
-from agents.common.llm import get_llm, safe_json_parse
+from agents.common.llm import DEFAULT_MODEL_ID, get_llm, safe_json_parse
 from agents.common.mcp_client import call_tool, get_prompt_text
+from observability import log_error, observe, set_output
 
 from .state import ExtractorState
 
@@ -34,6 +35,7 @@ async def node_harvest(state: ExtractorState) -> ExtractorState:
     result = await call_tool(
         "clinical_data_harvester_tool",
         {"patient_id": state["patient_id"], "doc_type": harvester_doc_type},
+        trace_id=state.get("trace_id"),
     )
     state["raw_text"] = result["raw_text"]
     return state
@@ -62,6 +64,7 @@ async def node_build_prompt(state: ExtractorState) -> ExtractorState:
         # note: state["language"] here is the DETECTED language from
         # node_detect_language, not whatever the caller originally sent
         {"language": state.get("language", "en"), "doc_types": prompt_doc_type},
+        trace_id=state.get("trace_id"),
     )
     # discharge-extraction-prompt is instructions-only; the source text
     # itself is appended here so the LLM has something to extract from.
@@ -71,10 +74,26 @@ async def node_build_prompt(state: ExtractorState) -> ExtractorState:
 
 async def node_extract(state: ExtractorState) -> ExtractorState:
     llm = get_llm()
-    response = llm.invoke(state["prompt"])
+    with observe(
+        "llm.extract_fields",
+        as_type="generation",
+        trace_seed=state.get("trace_id"),
+        input=state["prompt"],
+        model=DEFAULT_MODEL_ID,
+        metadata={"doc_type": state.get("doc_type"), "language": state.get("language")},
+    ) as span:
+        response = llm.invoke(state["prompt"])
+        set_output(span, response.content)
+
     try:
         state["extracted_fields"] = safe_json_parse(response.content)
     except ValueError as e:
         state["error"] = str(e)
         state["extracted_fields"] = {}
+        log_error(
+            "llm.extract_fields.parse_failed",
+            e,
+            trace_seed=state.get("trace_id"),
+            fallback_action="returned empty extracted_fields",
+        )
     return state

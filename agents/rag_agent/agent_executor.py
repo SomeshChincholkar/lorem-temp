@@ -5,10 +5,15 @@ Bridges A2A to the Clinical RAG Q&A Agent, STREAMING (spec Table 10:
 "token-by-token answer streaming in HITL Q&A page").
 
 Expected inbound message shape (a single DataPart):
-    {"question": "What medications was P1019 discharged on?",
-     "patient_filter": "P1019",   # optional
+    {"question": "What medications was this patient discharged on?",
+     "patient_id": "P1019",       # REQUIRED
      "top_k": 5,                   # optional
      "trace_id": "<optional>"}
+
+patient_id is mandatory: each patient has their own FAISS index, so a
+question with no patient has no index to search. Requests without one are
+rejected here rather than silently answered from the wrong records.
+`patient_filter` is accepted as a deprecated alias.
 
 Streaming shape: each generated token batch goes out as its own text
 artifact chunk appended to one artifact, so a streaming client paints
@@ -25,6 +30,8 @@ from a2a.server.tasks import TaskUpdater
 from a2a.types import DataPart, Part, TaskState, TextPart
 from a2a.utils import get_data_parts, new_agent_text_message, new_task
 
+from agents.common.a2a_server import traced_agent
+
 from .agent import stream_answer
 
 ANSWER_ARTIFACT_ID = "rag-answer"
@@ -33,6 +40,7 @@ ANSWER_ARTIFACT_ID = "rag-answer"
 class RagAgentExecutor(AgentExecutor):
     """AgentExecutor implementation for the Clinical RAG Q&A Agent."""
 
+    @traced_agent("rag_qa")
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         task = context.current_task or new_task(context.message)
         if not context.current_task:
@@ -49,16 +57,27 @@ class RagAgentExecutor(AgentExecutor):
 
         payload = data_parts[0]
         question = payload["question"]
-        patient_filter = payload.get("patient_filter")
+        # patient_filter is the pre-per-patient-index name, kept working
+        # so existing callers don't break silently.
+        patient_id = payload.get("patient_id") or payload.get("patient_filter")
         top_k = int(payload.get("top_k") or 5)
         trace_id = payload.get("trace_id") or str(uuid4())
+
+        if not patient_id:
+            await updater.failed(
+                message=new_agent_text_message(
+                    "'patient_id' is required — this agent answers from one "
+                    "patient's index at a time."
+                )
+            )
+            return
 
         first_chunk = True
         final_payload = None
 
         try:
             async for event in stream_answer(
-                question, patient_filter=patient_filter, top_k=top_k
+                question, patient_id, top_k=top_k, trace_id=trace_id
             ):
                 kind = event["type"]
 

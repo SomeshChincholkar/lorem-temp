@@ -33,7 +33,7 @@ from tools_harvester import clinical_data_harvester_tool
 from tools_lang_bridge import medical_lang_bridge_tool
 from tools_reporter import clinical_insight_reporter_tool
 from tools_rules_engine import clinical_rules_engine_tool
-from tools_watcher import clinical_watcher_tool
+from tools_watcher import clinical_watcher_tool, mark_documents_processed_tool
 
 mcp = FastMCP("primary-clinical-tools", port=8200, streamable_http_path="/clinicaltools")
 
@@ -43,6 +43,7 @@ register_prompts(mcp)
 
 # Tools (the 6 primitives)
 mcp.tool()(clinical_watcher_tool)
+mcp.tool()(mark_documents_processed_tool)
 mcp.tool()(clinical_data_harvester_tool)
 mcp.tool()(medical_lang_bridge_tool)
 mcp.tool()(clinical_rules_engine_tool)

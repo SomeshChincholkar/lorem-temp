@@ -17,6 +17,8 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from mcp.types import ListRootsResult, Root
 
+from observability import observe, set_output
+
 PRIMARY_MCP_URL = os.getenv("PRIMARY_MCP_URL", "http://localhost:8200/clinicaltools")
 
 # Must match the same folder your Module 3 roots.py / Watcher tool
@@ -78,6 +80,7 @@ async def call_tool(
     url: str = PRIMARY_MCP_URL,
     sampling_callback=None,
     elicitation_callback=None,
+    trace_id: str | None = None,
 ) -> dict:
     """
     Call an MCP tool and return its parsed JSON/dict result.
@@ -91,30 +94,66 @@ async def call_tool(
     elicitation_callback: likewise for tools that call ctx.elicit()
     (the Elicitation primitive) -- i.e. clinical_rules_engine_tool,
     called by the Validator Agent.
+
+    trace_id: threads this call into the case-level LangFuse trace. Every
+    MCP tool invocation in the system goes through this function, so
+    instrumenting here covers spec 7.2's per-tool-call span requirement
+    in one place rather than at eight call sites.
     """
-    async with mcp_session(
-        url,
-        sampling_callback=sampling_callback,
-        elicitation_callback=elicitation_callback,
-    ) as session:
-        result = await session.call_tool(tool_name, arguments=arguments)
-        return _unwrap_tool_result(result)
+    with observe(
+        f"mcp.tool.{tool_name}",
+        as_type="tool",
+        trace_seed=trace_id,
+        input=arguments,
+        metadata={"server_url": url, "tool": tool_name},
+    ) as span:
+        async with mcp_session(
+            url,
+            sampling_callback=sampling_callback,
+            elicitation_callback=elicitation_callback,
+        ) as session:
+            result = await session.call_tool(tool_name, arguments=arguments)
+            unwrapped = _unwrap_tool_result(result)
+            set_output(span, unwrapped)
+            return unwrapped
 
 
-async def get_prompt_text(name: str, arguments: dict, url: str = PRIMARY_MCP_URL) -> str:
+async def get_prompt_text(
+    name: str, arguments: dict, url: str = PRIMARY_MCP_URL, trace_id: str | None = None
+) -> str:
     """Fetch a rendered prompt string via MCP Prompts (get_prompt)."""
-    async with mcp_session(url) as session:
-        result = await session.get_prompt(name, arguments=arguments)
-        # GetPromptResult.messages is list[PromptMessage]; every prompt in
-        # prompts.py is a single user-role text message.
-        return result.messages[0].content.text
+    with observe(
+        f"mcp.prompt.{name}",
+        as_type="span",
+        trace_seed=trace_id,
+        input=arguments,
+        metadata={"primitive": "prompts"},
+    ) as span:
+        async with mcp_session(url) as session:
+            result = await session.get_prompt(name, arguments=arguments)
+            # GetPromptResult.messages is list[PromptMessage]; every prompt
+            # in prompts.py is a single user-role text message.
+            text = result.messages[0].content.text
+            set_output(span, {"chars": len(text)})
+            return text
 
 
-async def read_resource_text(uri: str, url: str = PRIMARY_MCP_URL) -> str:
+async def read_resource_text(
+    uri: str, url: str = PRIMARY_MCP_URL, trace_id: str | None = None
+) -> str:
     """Read an MCP Resource's text content by URI."""
-    async with mcp_session(url) as session:
-        result = await session.read_resource(uri)
-        return result.contents[0].text
+    with observe(
+        "mcp.resource.read",
+        as_type="retriever",
+        trace_seed=trace_id,
+        input={"uri": uri},
+        metadata={"primitive": "resources"},
+    ) as span:
+        async with mcp_session(url) as session:
+            result = await session.read_resource(uri)
+            text = result.contents[0].text
+            set_output(span, {"chars": len(text)})
+            return text
 
 
 def _unwrap_tool_result(result) -> dict:

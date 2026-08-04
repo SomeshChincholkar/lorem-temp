@@ -30,6 +30,8 @@ from a2a.server.tasks import TaskUpdater
 from a2a.types import DataPart, Part, TaskState
 from a2a.utils import get_data_parts, new_agent_text_message, new_task
 
+from agents.common.a2a_server import traced_agent
+
 from agents.common.adk_runtime import run_adk_agent
 
 from .agent import monitor_agent, scan_for_new_documents
@@ -38,6 +40,7 @@ from .agent import monitor_agent, scan_for_new_documents
 class MonitorAgentExecutor(AgentExecutor):
     """AgentExecutor implementation for the Discharge Monitor Agent."""
 
+    @traced_agent("monitor")
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         task = context.current_task or new_task(context.message)
         if not context.current_task:

@@ -17,6 +17,7 @@ from pathlib import Path
 
 from agents.common.llm import get_llm
 from agents.common.mcp_client import get_prompt_text
+from guardrails import ToxicityFilter
 
 SECTION_ORDER = ("patient", "meds", "labs", "bill", "instructions")
 
@@ -122,6 +123,29 @@ async def build_base_prompt(risk_level: str, audience: str = "patient") -> str:
     return await get_prompt_text(
         "summary-generation-prompt", {"risk_level": risk_level, "audience": audience}
     )
+
+
+_toxicity = ToxicityFilter()
+
+
+def screen_section(text: str) -> dict:
+    """
+    Toxicity screen for one finished section (spec Table 12, row 4).
+
+    Runs on the assembled section rather than on each streamed chunk:
+    the patterns that matter here span whole sentences ("stop taking all
+    your medications"), and a chunk boundary could easily fall mid-phrase
+    and let one through.
+
+    Returns {"text": <safe text>, "verdict": ..., "matches": [...]}.
+    """
+    result = _toxicity.check(text)
+    return {
+        "text": result["filtered_text"],
+        "verdict": result["verdict"],
+        "categories": result["categories"],
+        "matches": result["matches"],
+    }
 
 
 async def stream_section(section: str, report: dict, base_prompt: str):

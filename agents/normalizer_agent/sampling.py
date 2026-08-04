@@ -30,6 +30,7 @@ from mcp.types import (
 )
 
 from agents.common.llm import get_llm
+from observability import log_error, log_sampling_event, observe, set_output
 
 # Server-side hint name -> concrete Bedrock model id. The server asks
 # for a *family* ("nova-lite" for multilingual work, "command-r-plus"
@@ -76,11 +77,16 @@ def flatten_messages(params: CreateMessageRequestParams) -> str:
     return "\n\n".join(parts)
 
 
-def make_sampling_callback(instruction: str | None = None):
+def make_sampling_callback(instruction: str | None = None, trace_id: str | None = None):
     """
     Build the sampling callback, optionally prefixing every request with
     server-authored instruction text (the abbreviation-normalization
     prompt fetched via MCP Prompts).
+
+    trace_id threads this into the case-level LangFuse trace. Spec 7.2
+    asks specifically for sampling events recording the server's model
+    preferences, the model the client actually chose, and the result --
+    this callback is the only place all three are visible at once.
 
     Returns a callable matching the SDK's SamplingFnT protocol:
         async (RequestContext, CreateMessageRequestParams)
@@ -100,16 +106,35 @@ def make_sampling_callback(instruction: str | None = None):
             if preamble:
                 prompt = "\n\n".join(preamble) + "\n\n" + prompt
 
-            llm = get_llm(model_id=model_id)
-            response = await llm.ainvoke(prompt)
+            hints = []
+            if params.modelPreferences and params.modelPreferences.hints:
+                hints = [h.name for h in params.modelPreferences.hints if h.name]
 
-            text = response.content
-            if isinstance(text, list):
-                # Some Bedrock models return content as a list of blocks.
-                text = "".join(
-                    block.get("text", "") if isinstance(block, dict) else str(block)
-                    for block in text
-                )
+            llm = get_llm(model_id=model_id)
+            with observe(
+                "llm.sampling",
+                as_type="generation",
+                trace_seed=trace_id,
+                input=prompt,
+                model=model_id,
+                metadata={"server_hints": hints, "primitive": "sampling"},
+            ) as span:
+                response = await llm.ainvoke(prompt)
+                text = response.content
+                if isinstance(text, list):
+                    # Some Bedrock models return content as a list of blocks.
+                    text = "".join(
+                        block.get("text", "") if isinstance(block, dict) else str(block)
+                        for block in text
+                    )
+                set_output(span, text)
+
+            log_sampling_event(
+                trace_id,
+                model_preferences=hints,
+                model_selected=model_id,
+                result_preview=(text or "")[:500],
+            )
 
             return CreateMessageResult(
                 role="assistant",
@@ -122,6 +147,12 @@ def make_sampling_callback(instruction: str | None = None):
             # waiting on this response, and an exception here would
             # surface as an opaque transport failure instead of a
             # readable tool error.
+            log_error(
+                "llm.sampling.failed",
+                exc,
+                trace_seed=trace_id,
+                fallback_action="returned ErrorData to the MCP server",
+            )
             return ErrorData(
                 code=INTERNAL_ERROR,
                 message=f"Sampling callback failed: {type(exc).__name__}: {exc}",

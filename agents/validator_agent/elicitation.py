@@ -28,6 +28,7 @@ from mcp.types import (
 )
 
 from agents.common import elicitation_store
+from observability import log_elicitation_event
 
 # Store status -> MCP ElicitResult action.
 STATUS_TO_ACTION = {
@@ -84,6 +85,15 @@ def make_elicitation_callback(
         )
 
         action = STATUS_TO_ACTION.get(record.get("status"), "decline")
+
+        # Spec 7.2: schema sent, reviewer response, action taken.
+        log_elicitation_event(
+            trace_id,
+            schema=schema,
+            action=action,
+            reviewer_response=record.get("data"),
+            timed_out=bool(record.get("timed_out")),
+        )
 
         # content is only meaningful on accept; the SDK validates it
         # against requestedSchema, so send nothing on decline/cancel.

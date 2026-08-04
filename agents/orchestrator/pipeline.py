@@ -18,25 +18,26 @@ later (spec 7.2).
 
 from uuid import uuid4
 
+from agents.common import push_notifications
 from agents.common.a2a_client import send_message
+
+# Spec Table 12 row 5 (HITL Escalation). Re-exported here because this
+# module is where the pipeline applies it; the implementation lives with
+# the other four guardrails.
+from guardrails import GuardrailManager, guardrail_manager  # noqa: F401
+from observability import flush, log_guardrail_events, observe, set_output, trace_url
 
 DOC_TYPES = ("doctor_reports", "lab_reports", "bills")
 
 # Extractor doc_type -> the Validator payload key it feeds.
+# lab_reports was previously extracted and then dropped on the floor,
+# which left the audit report (and so the summary's "your test results"
+# section) with no lab data at all.
 DOC_TYPE_TO_VALIDATOR_KEY = {
     "doctor_reports": "extracted_discharge",
+    "lab_reports": "extracted_lab",
     "bills": "extracted_bill",
 }
-
-
-def guardrail_manager(risk_level: str | None, discharge_blocked: bool | None) -> dict:
-    """
-    Spec Table 12's HITL Escalation guardrail: a high-risk or blocked
-    case can never auto-approve, regardless of what any single agent
-    concluded.
-    """
-    requires_hitl = bool(discharge_blocked) or str(risk_level or "").lower() == "high"
-    return {"requires_hitl": requires_hitl}
 
 
 def _unwrap_fields(extracted: dict | None) -> dict:
@@ -69,6 +70,34 @@ async def run_discharge_pipeline(
     Gradio UI and the dashboard can show where a run stopped and why.
     """
     trace_id = trace_id or str(uuid4())
+
+    # Root span for the case. Every downstream agent, tool call, LLM
+    # generation and guardrail event attaches to this same trace via the
+    # trace_id threaded through each A2A message's payload -- which is
+    # what spec 7.2 means by "end-to-end trace ID per discharge case".
+    with observe(
+        "pipeline.discharge",
+        as_type="chain",
+        trace_seed=trace_id,
+        input={"patient_id": patient_id},
+        metadata={"trace_id": trace_id},
+    ) as root_span:
+        result = await _run_pipeline_steps(patient_id, trace_id, normalize_non_english)
+        set_output(root_span, {
+            "final_status": result.get("final_status"),
+            "risk_level": result.get("risk_level"),
+            "requires_hitl": result.get("requires_hitl"),
+        })
+
+    result["trace_url"] = trace_url(trace_id)
+    flush()
+    return result
+
+
+async def _run_pipeline_steps(
+    patient_id: str, trace_id: str, normalize_non_english: bool
+) -> dict:
+    """The pipeline body. Split out so the root span stays readable."""
     steps: list[dict] = []
     extracted: dict[str, dict] = {}
     languages: dict[str, str] = {}
@@ -139,22 +168,64 @@ async def run_discharge_pipeline(
     translation_confidence = min(confidences) if confidences else None
 
     # --- 4. Validator: completeness + EHR rules + audit report -------
-    validation = await send_message(
-        "validator",
-        {
-            "patient_id": patient_id,
-            "extracted_discharge": extracted.get("doctor_reports", {}),
-            "extracted_bill": extracted.get("bills", {}),
-            "translation_confidence": translation_confidence,
-            "trace_id": trace_id,
-        },
-    )
+    validator_payload = {
+        "patient_id": patient_id,
+        "translation_confidence": translation_confidence,
+        "trace_id": trace_id,
+    }
+    for doc_type, key in DOC_TYPE_TO_VALIDATOR_KEY.items():
+        validator_payload[key] = extracted.get(doc_type, {})
+
+    validation = await send_message("validator", validator_payload)
     record("validate", validation)
 
     report = validation["artifacts"][0] if (validation["ok"] and validation["artifacts"]) else {}
 
-    # --- 5. Guardrail: can this release without a human? ------------
-    guardrail = guardrail_manager(report.get("risk_level"), report.get("discharge_blocked"))
+    # --- 5. Retire the paperwork ------------------------------------
+    # Only on a completed validation. Marking documents processed after a
+    # failed run would hide them from the next scan, silently dropping
+    # the case.
+    if validation["ok"]:
+        try:
+            from agents.common.mcp_client import call_tool
+
+            await call_tool(
+                "mark_documents_processed_tool",
+                {"patient_id": patient_id},
+                trace_id=trace_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Non-fatal: worst case the Watcher re-reports these files,
+            # which is exactly the behaviour before this call existed.
+            record("mark_processed", {"ok": False, "state": "error", "error": str(exc)})
+
+    # --- 6. Guardrail: can this release without a human? ------------
+    guardrails = GuardrailManager(trace_id=trace_id)
+    guardrail = guardrails.check_escalation(
+        report.get("risk_level"), report.get("discharge_blocked")
+    )
+    log_guardrail_events(guardrails, trace_seed=trace_id)
+
+    # --- 7. Push notification (spec §9) -----------------------------
+    # Fires only when configured. The cases worth waking someone for are
+    # exactly the ones a human must act on, so a clean auto-approve is
+    # notified as informational and a blocked case as requiring review.
+    if push_notifications.is_enabled():
+        push_result = await push_notifications.send_push_notification(
+            "discharge.reviewed",
+            patient_id,
+            trace_id=trace_id,
+            final_status=report.get("final_status"),
+            risk_level=report.get("risk_level"),
+            requires_hitl=guardrail["requires_hitl"],
+            discharge_blocked=report.get("discharge_blocked"),
+            report_path=report.get("json_path"),
+        )
+        record(
+            "push_notification",
+            {"ok": push_result["sent"], "state": push_result["status"],
+             "error": push_result["error"]},
+        )
 
     return {
         "patient_id": patient_id,
