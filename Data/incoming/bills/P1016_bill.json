@@ -1,0 +1,126 @@
+{
+  "bill_id": "BILL-2026-1016",
+  "patient_id": "P1016",
+  "patient_name": "Lukas Müller",
+  "issue_date": "2026-06-07",
+  "due_date": "2026-07-07",
+  "currency": "EUR",
+  "payment_status": "PAID",
+  "payment_method": "Krankenversicherung",
+  "notes": "Kostenübernahme durch die Krankenkasse bestätigt. Eigenanteil bei Entlassung beglichen. Vollständig ausgeglichen.",
+  "line_items": [
+    {
+      "item_code": "ROOM-WARD",
+      "description": "Stationäres Bett (6 Nächte)",
+      "qty": 6,
+      "unit_price": 240.0,
+      "total": 1440.0
+    },
+    {
+      "item_code": "PHARM-AMOX",
+      "description": "Amoxicillin 500 mg, 21 Tabletten",
+      "qty": 21,
+      "unit_price": 0.35,
+      "total": 7.35
+    },
+    {
+      "item_code": "PHARM-PARA",
+      "description": "Paracetamol 500 mg, 20 Tabletten",
+      "qty": 20,
+      "unit_price": 0.08,
+      "total": 1.6
+    },
+    {
+      "item_code": "IMG-CXR",
+      "description": "Röntgenaufnahme des Thorax",
+      "qty": 1,
+      "unit_price": 85.0,
+      "total": 85.0
+    },
+    {
+      "item_code": "LAB-CBC",
+      "description": "Großes Blutbild",
+      "qty": 1,
+      "unit_price": 42.0,
+      "total": 42.0
+    },
+    {
+      "item_code": "PROF-MD",
+      "description": "Honorar des behandelnden Arztes",
+      "qty": 1,
+      "unit_price": 520.0,
+      "total": 520.0
+    }
+  ],
+  "subtotal": 2095.95,
+  "tax": 398.23,
+  "total_amount": 2494.18,
+  "language": "de",
+  "bill_title": "Krankenhausrechnung — Aufstellung der Leistungen",
+  "vendor_name": "St. Marian Regionales Medizinisches Zentrum",
+  "labels": {
+    "bill_id": "Rechnungsnummer",
+    "patient_id": "Patienten-ID",
+    "patient_name": "Patientenname",
+    "issue_date": "Rechnungsdatum",
+    "due_date": "Fälligkeitsdatum",
+    "currency": "Währung",
+    "item_code": "Code",
+    "description": "Beschreibung",
+    "qty": "Menge",
+    "unit_price": "Einzelpreis",
+    "total": "Gesamt",
+    "subtotal": "Zwischensumme",
+    "tax": "MwSt.",
+    "total_due": "GESAMTBETRAG",
+    "payment_status": "Zahlungsstatus",
+    "payment_method": "Zahlungsart",
+    "notes": "Anmerkungen"
+  },
+  "payment_status_label": "BEZAHLT",
+  "footer": "Vielen Dank für Ihre Zahlung. Diese Quittung bestätigt, dass die oben genannten Beträge vollständig beglichen wurden. Bitte bewahren Sie dieses Dokument für Ihre Unterlagen auf.",
+  "line_items_en": [
+    {
+      "item_code": "ROOM-WARD",
+      "description": "Ward bed (6 nights)",
+      "qty": 6,
+      "unit_price": 240.0,
+      "total": 1440.0
+    },
+    {
+      "item_code": "PHARM-AMOX",
+      "description": "Amoxicillin 500 mg, 21 tabs",
+      "qty": 21,
+      "unit_price": 0.35,
+      "total": 7.35
+    },
+    {
+      "item_code": "PHARM-PARA",
+      "description": "Paracetamol 500 mg, 20 tabs",
+      "qty": 20,
+      "unit_price": 0.08,
+      "total": 1.6
+    },
+    {
+      "item_code": "IMG-CXR",
+      "description": "Chest X-ray",
+      "qty": 1,
+      "unit_price": 85.0,
+      "total": 85.0
+    },
+    {
+      "item_code": "LAB-CBC",
+      "description": "Complete blood count",
+      "qty": 1,
+      "unit_price": 42.0,
+      "total": 42.0
+    },
+    {
+      "item_code": "PROF-MD",
+      "description": "Attending physician fee",
+      "qty": 1,
+      "unit_price": 520.0,
+      "total": 520.0
+    }
+  ]
+}

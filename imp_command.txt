@@ -1,10 +1,63 @@
-python -m uvicorn mock_ehr.main:app --port 8050
+# =====================================================================
+# Setup
+# =====================================================================
 python -m pip install -r requirements.txt
+cp .env.example .env          # then fill in AWS creds + AGENT_AUTH_TOKEN
 
-npx @modexcontextprotocol/inspector
+# =====================================================================
+# Start order (each in its own terminal, from the project root)
+# =====================================================================
+# 1. Data layer
+python -m uvicorn mock_ehr.main:app --port 8050
 
-# To execute LG-5.1
+# 2. MCP servers
+python mcp_primary/server.py                    # :8200 /clinicaltools
+python mcp_secondary/server.py                  # :8201 /analyticstools
+
+# 3. Agents
+python -m agents.extractor_agent.server         # :8100 LangGraph
+python -m agents.validator_agent.server         # :8101 LangGraph
+python -m agents.normalizer_agent.server        # :8102 LangGraph
+python -m agents.monitor_agent.server           # :8103 Google ADK
+python -m agents.summary_agent.server           # :8104 Google ADK  [STREAMING]
+python -m agents.rag_agent.server               # :8105 Agno        [STREAMING]
+
+# 4. Host Orchestrator (Gradio UI)
+python -m agents.orchestrator.server            # :8083
+
+# =====================================================================
+# One-off setup tasks
+# =====================================================================
+# Build the FAISS index ahead of time (otherwise the first Q&A request
+# pays for the embedding model download + full corpus embedding)
+python -m agents.rag_agent.build_index
+python -m agents.rag_agent.build_index --force  # rebuild from scratch
+
+# MCP Inspector (browse tools/resources/prompts on either server)
+npx @modelcontextprotocol/inspector
+
+# =====================================================================
+# Tests
+# =====================================================================
+python -m pytest tests/ -q                      # offline suite, no AWS needed
+
+# Live A2A smoke tests (need the agent + MCP servers running, and AWS creds)
+python -m agents.extractor_agent.test_5_1 P1019 doctor_reports
+python -m agents.normalizer_agent.test_5_2 P1015 doctor_reports
+python -m agents.common.test_language_detect
+
+# Raw A2A call against the Extractor
 curl.exe -X POST http://localhost:8100/ `
   -H "Content-Type: application/json" `
-  -H "X-Agent-Auth-Token: ecd6eb9e2b13e6638c8aa710c65d06264a8f29ec157b6504" `
+  -H "X-Agent-Auth-Token: $env:AGENT_AUTH_TOKEN" `
   --data "@request.json"
+
+# =====================================================================
+# Test patients (scenarios encoded in mock_ehr/data.py)
+# =====================================================================
+# P1019  EN  .txt/.json   clean case, should auto-approve
+# P1015  HI  .txt         translates cleanly; only low-confidence risk
+# P1016  DE  .json        allergy contradiction (Penicillin vs Amoxicillin) -> BLOCK
+# P1014  ES  .docx        medication omission x2 (Loperamide, Hyoscine) -> HITL
+# P1020  ES  .pdf         PDF extraction path
+# P1023  EN  .png         OCR path (needs Tesseract installed)

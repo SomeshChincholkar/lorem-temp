@@ -1,8 +1,29 @@
-@"
+# Secrets / local config
 .env
+.env.local
+
+# Python
 __pycache__/
+*.py[cod]
 .venv/
-"@ | Set-Content .gitignore
-git add .gitignore
-git commit -m "Add gitignore"
-git push
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Generated artifacts
+Data/reports/*.json
+Data/reports/*.html
+Data/reports/*.png
+Data/reports/pipeline.log
+data/vector_db/
+data/processed.json
+Data/elicitations/
+*.sqlite
+*.sqlite3
+*.db
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

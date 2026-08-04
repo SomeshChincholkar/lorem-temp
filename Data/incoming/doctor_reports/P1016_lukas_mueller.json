@@ -1,0 +1,77 @@
+{
+  "dokumenttyp": "Entlassungsbericht",
+  "krankenhaus": "St. Marian Regionales Medizinisches Zentrum",
+  "sprache": "de",
+
+  "patienten_id": "P1016",
+  "patientenname": "Lukas Müller",
+  "geburtsdatum": "1978-04-05",
+  "geschlecht": "männlich",
+  "alter": 48,
+  "adresse": "Lindenstraße 47, 80331 München, Deutschland",
+  "aufnahmedatum": "2026-06-01",
+  "entlassungsdatum": "2026-06-07",
+  "station": "4C",
+  "bettnummer": "22",
+  "fachabteilung": "Allgemeine Innere Medizin",
+  "behandelnder_arzt": "Dr. med. Katrin Hoffmann",
+  "konsiliarärzte": ["Dr. med. Stefan Bauer (Pneumologie)"],
+  "entlassung_genehmigt": true,
+  "entlassung_genehmigt_von": "Dr. med. Katrin Hoffmann",
+
+  "entlassungsdiagnose": [
+    {
+      "beschreibung": "Ambulant erworbene Pneumonie, rechter Unterlappen",
+      "icd10": "J18.9"
+    }
+  ],
+
+  "allergien": [
+    {
+      "substanz": "Penicillin",
+      "reaktion": "Generalisierter Hautausschlag und Urtikaria",
+      "schweregrad": "mittelschwer",
+      "dokumentiert_am": "2019-03-11"
+    }
+  ],
+
+  "entlassungsmedikation": [
+    {
+      "lfd_nr": 1,
+      "medikamentenname": "Amoxicillin",
+      "stärke": "500 mg",
+      "dosierung": "1 Tablette",
+      "häufigkeit": "TID",
+      "verabreichungsweg": "oral",
+      "zeitraum": "7 Tage",
+      "bemerkungen": "Zu den Mahlzeiten einnehmen",
+      "gesamtmenge": 21
+    },
+    {
+      "lfd_nr": 2,
+      "medikamentenname": "Paracetamol",
+      "stärke": "500 mg",
+      "dosierung": "1 Tablette",
+      "häufigkeit": "q6h PRN",
+      "verabreichungsweg": "oral",
+      "zeitraum": "5 Tage",
+      "bemerkungen": "Bei Fieber über 38,5 °C",
+      "gesamtmenge": 20
+    }
+  ],
+
+  "nachsorgetermin": [
+    "Hausarztkontrolle bei Dr. med. Katrin Hoffmann am 2026-06-17.",
+    "Röntgen-Thorax-Kontrolle in 6 Wochen zur Bestätigung der Rückbildung."
+  ],
+
+  "entlassungsanweisungen": [
+    "Die Antibiotikatherapie vollständig abschließen, auch bei Beschwerdefreiheit.",
+    "Ausreichend Flüssigkeit aufnehmen und körperliche Schonung für 10 Tage.",
+    "Atemübungen dreimal täglich durchführen.",
+    "Bei Atemnot, Brustschmerzen oder erneutem Fieber sofort die Notaufnahme aufsuchen.",
+    "Pharmazeutische Beratung zu allen Medikamenten bei Entlassung erfolgt."
+  ],
+
+  "erstellt_am": "2026-06-07T09:25:00+02:00"
+}

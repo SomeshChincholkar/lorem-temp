@@ -8,10 +8,10 @@ Calls the Primary MCP server (tool: clinical_data_harvester_tool,
 prompt: discharge-extraction-prompt) and the Bedrock LLM.
 """
 
+from agents.common.language_detect import detect_language
 from agents.common.llm import get_llm, safe_json_parse
 from agents.common.mcp_client import call_tool, get_prompt_text
 
-from .language_detect import detect_language
 from .state import ExtractorState
 
 # Watcher/folder doc_type -> Harvester tool's doc_type argument

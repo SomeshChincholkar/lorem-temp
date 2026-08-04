@@ -3,7 +3,7 @@ tools_harvester.py
 
 The Clinical Data Harvester primitive. Extracts plain text from any of
 the document formats that show up in Data/incoming/: .txt, .json, .pdf,
-.png (via OCR), and .png.ocr.txt (an already-OCR'd sidecar file).
+.docx, .png (via OCR), and .png.ocr.txt (an already-OCR'd sidecar file).
 
 extract_text_any_format() is also the function resources.py (step 3.2)
 should eventually import instead of its temporary local stub -- see
@@ -51,6 +51,30 @@ def _read_pdf(path: Path) -> str:
             page_text = page.extract_text() or ""
             text_parts.append(page_text)
     return "\n".join(text_parts).strip()
+
+
+def _read_docx(path: Path) -> str:
+    """
+    Extract text from a Word document.
+
+    Reads tables as well as paragraphs -- discharge reports put the
+    demographics block and the prescription table in tables, and
+    python-docx does NOT include table text in document.paragraphs,
+    so paragraph-only extraction would silently drop every mandatory
+    field.
+    """
+    import docx
+
+    document = docx.Document(str(path))
+
+    parts = [p.text for p in document.paragraphs if p.text.strip()]
+    for table in document.tables:
+        for row in table.rows:
+            cells = [c.text.strip() for c in row.cells]
+            if any(cells):
+                parts.append(" | ".join(cells))
+
+    return "\n".join(parts).strip()
 
 
 def _read_png(path: Path) -> str:
@@ -102,6 +126,8 @@ def extract_text_any_format(path: Path) -> str:
         return _read_json(path)
     if ext == ".pdf":
         return _read_pdf(path)
+    if ext == ".docx":
+        return _read_docx(path)
     if ext == ".png":
         return _read_png(path)
 
@@ -112,7 +138,7 @@ def find_file_for_patient(folder: Path, patient_id: str) -> Path:
     """
     Glob {patient_id}_* inside folder. If multiple files exist for the
     same patient, prefer structured/pre-processed formats over ones
-    that still need OCR: .json > .txt > .png.ocr.txt > .pdf > .png
+    that still need OCR: .json > .txt > .docx > .png.ocr.txt > .pdf > .png
     """
     if not folder.exists():
         raise FileNotFoundError(f"Folder does not exist: {folder}")
@@ -126,14 +152,16 @@ def find_file_for_patient(folder: Path, patient_id: str) -> Path:
         if name.endswith(".json"):
             return 0
         if name.endswith(".png.ocr.txt"):
-            return 2
+            return 3
         if name.endswith(".txt"):
             return 1
+        if name.endswith(".docx"):
+            return 2
         if name.endswith(".pdf"):
-            return 3
-        if name.endswith(".png"):
             return 4
-        return 5
+        if name.endswith(".png"):
+            return 5
+        return 6
 
     return sorted(matches, key=priority)[0]
 

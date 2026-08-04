@@ -1,8 +1,12 @@
 """
-agents/extractor_agent/language_detect.py
+agents/common/language_detect.py
 
-Detects the language of harvested raw document text. Two tiers, so
-this can never come back empty/None:
+Detects the language of harvested raw document text. Shared by the
+Clinical Extractor Agent (to tag the source language of an extraction)
+and the Clinical Normalizer Agent (to pick the sampling model hint and
+decide whether translation is needed at all).
+
+Two tiers, so this can never come back empty/None:
 
   1. langdetect (fast, offline, no model download) -- tried first for
      any text with enough signal.

@@ -1,5 +1,5 @@
 """
-agents/extractor_agent/test_language_detect.py
+agents/common/test_language_detect.py
 
 Sanity check for language_detect.py.
 
@@ -12,12 +12,12 @@ missing/expired AWS credential doesn't make you think langdetect is
 broken.
 
 Usage:
-    python -m agents.extractor_agent.test_language_detect
+    python -m agents.common.test_language_detect
 """
 
 import asyncio
 
-from .language_detect import detect_language
+from agents.common.language_detect import detect_language
 
 # Long enough that langdetect alone should nail these -- no LLM call
 # should happen for any of these.
