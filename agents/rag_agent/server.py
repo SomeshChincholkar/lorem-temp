@@ -10,10 +10,12 @@ Prerequisites:
   - Secondary MCP Analytics Server      :8201 (MultiMCPTools)
   - Live Bedrock credentials in .env
 
-The FAISS index builds itself on the first question if
-data/vector_db/ is empty. That first request downloads the
-all-MiniLM-L6-v2 weights (~90MB) and will be noticeably slower; build it
-ahead of time with:
+Each patient has their OWN FAISS index under data/vector_db/{patient_id}/,
+so every question must name a patient and no answer can draw on another
+patient's records. A missing patient's index builds itself on the first
+question about them; that first request also downloads the
+all-MiniLM-L6-v2 weights (~90MB) and will be noticeably slower. Build
+them ahead of time with:
 
     python -m agents.rag_agent.build_index
 """

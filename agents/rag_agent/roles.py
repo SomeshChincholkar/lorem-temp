@@ -23,7 +23,7 @@ import numpy as np
 from agents.common.llm import get_llm, safe_json_parse
 from agents.common.mcp_client import get_prompt_text
 
-from .indexing import embed_texts, load_index
+from .indexing import PatientNotIndexedError, embed_texts, load_patient_index
 
 OUT_OF_CONTEXT_ANSWER = (
     "I don't know — this information is not available in the patient records."
@@ -44,18 +44,31 @@ STOPWORDS = {
 # ---------------------------------------------------------------------
 # Role 2: Retrieval Agent
 # ---------------------------------------------------------------------
-def retrieve_top_k(question: str, k: int = 5, patient_filter: str | None = None) -> list[dict]:
+def retrieve_top_k(question: str, patient_id: str, k: int = 5) -> list[dict]:
     """
-    Embed the question and pull the k nearest chunks.
+    Embed the question and pull the k nearest chunks from ONE patient's
+    index.
 
-    When patient_filter is set, over-fetch and then filter: FAISS has no
-    metadata filtering, so narrowing after the search is the only way to
-    guarantee k results for that patient.
+    patient_id is required and positional, not an optional filter. Each
+    patient has their own FAISS index, so scoping is structural: there is
+    no code path by which another patient's chunk can reach this result
+    list. That also makes the top-k exact -- no over-fetch heuristic that
+    could silently return fewer results than requested.
+
+    Raises PatientNotIndexedError for an unknown patient. That must be a
+    clear error rather than an empty list, which downstream would read as
+    "nothing in their records" and produce a confidently wrong refusal.
     """
-    index, metadata = load_index()
+    if not patient_id:
+        raise PatientNotIndexedError(
+            "retrieve_top_k requires a patient_id -- questions must name a patient."
+        )
 
-    fetch_k = k * 10 if patient_filter else k
-    fetch_k = min(fetch_k, len(metadata))
+    index, metadata = load_patient_index(patient_id)
+
+    fetch_k = min(k, len(metadata))
+    if fetch_k <= 0:
+        return []
 
     query_vector = embed_texts([question])
     scores, indices = index.search(query_vector, fetch_k)
@@ -64,12 +77,7 @@ def retrieve_top_k(question: str, k: int = 5, patient_filter: str | None = None)
     for score, position in zip(scores[0], indices[0]):
         if position < 0:
             continue
-        record = metadata[position]
-        if patient_filter and record.get("patient_id") != patient_filter:
-            continue
-        results.append({**record, "score": float(score)})
-        if len(results) >= k:
-            break
+        results.append({**metadata[position], "score": float(score)})
 
     return results
 

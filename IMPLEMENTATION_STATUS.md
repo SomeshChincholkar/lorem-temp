@@ -6,7 +6,7 @@ this implementation knowingly departs from the capstone spec.
 Companion to `BUILD_GUIDE_FA5.md` (the plan). This file is the ground truth
 for *what actually exists*.
 
-Last updated: 2026-08-03 · **75 tests passing**
+Last updated: 2026-08-04 · **219 tests passing** · **every spec section implemented**
 
 ---
 
@@ -25,10 +25,14 @@ Last updated: 2026-08-03 · **75 tests passing**
 | 2.5 | Discharge Summary Generator (ADK, streaming) | 8104 | **Done** |
 | 2.6 | Clinical RAG Q&A Agent (Agno, streaming) | 8105 | **Done** |
 | 8 | Host Orchestrator (ADK + Gradio) | 8083 | **Done** |
-| 8 | Streamlit HITL Dashboard (5 pages) | 8501 | **Not started** |
-| 7.1 | RAI Guardrails (4 modules) | — | **Partial** — 1 of 5 |
-| 7.2 | LangFuse Observability | — | **Not started** |
-| 5 | A2A Push Notifications | — | **Not started** |
+| 8 | Streamlit HITL Dashboard (5 pages) | 8501 | **Done** |
+| 7.1 | RAI Guardrails (5 modules) | — | **Done** |
+| 2.5 | PDF report / summary export | — | **Done** |
+| 7.2 | LangFuse Observability | — | **Done** |
+| 9 | A2A Push Notifications | — | **Done** |
+
+**Every spec section is implemented.** What is left is verification
+against live infrastructure, not construction — see §5.
 
 ---
 
@@ -126,36 +130,178 @@ Agno specifics per spec: `agno.Agent` + `MultiMCPTools` across **both** MCP
 servers, `SqliteDb` session persistence with `num_history_runs=3`, async
 invocation.
 
+**One FAISS index per patient**, and `patient_id` is mandatory on every
+question:
+
+```
+data/vector_db/
+  P1014/  index.faiss  chunks.json
+  P1015/  index.faiss  chunks.json
+  ...
+```
+
+FAISS has no metadata filtering, so a shared index could only scope a
+query by over-fetching and discarding other patients' chunks afterwards —
+approximate, and it silently returns fewer results than asked for when the
+requested patient ranks below the over-fetch window. A patient-scoped
+index makes the top-k exact and makes cross-patient leakage structurally
+impossible rather than filtered-out after the fact.
+
+The trade-off, accepted deliberately: **cross-patient questions are no
+longer answerable in one query.** "Which patient has an allergy
+contradiction?" now has to be asked per patient. Enforced in three places
+so it can't be forgotten — `retrieve_top_k` raises without a patient, the
+agent returns a distinct "select a patient" message, and the A2A executor
+fails the task. The dashboard's page-4 example queries were rewritten
+without patient IDs, since the sidebar selection supplies the scope.
+
 **Host Orchestrator (:8083, ADK + Gradio)** — A2A client to everything.
 Four tabs: Run Pipeline (non-streaming), Discharge Summary (streaming),
 Clinical Q&A (streaming), System Health (AgentCard discovery).
 One `trace_id` is minted at the top and threaded through every A2A call —
 the hook LangFuse will use later.
 
-### 2.4 Cross-cutting pieces built along the way
+### 2.4 RAI Guardrails (`guardrails/`)
+
+All five of spec Table 12, pattern-based rather than model-based so that
+"why was this blocked?" always has an answer — which matters more than
+recall in a clinical audit trail.
+
+| Guardrail | Module | Runs where |
+|---|---|---|
+| **PII/PHI Redaction** | `pii.py` | Log and external-call boundary |
+| **Prompt Injection** | `injection.py` | RAG query, before any model sees it |
+| **Toxicity Filter** | `toxicity.py` | Each summary section, before emit |
+| **Hallucination Check** | `hallucination.py` | RAG answer, gated on RAG Triad faithfulness |
+| **HITL Escalation** | `manager.py` | Orchestrator, after the Reporter runs |
+
+`GuardrailManager` composes all five and keeps one event log — the
+structure LangFuse will consume as guardrail spans.
+
+Decisions worth knowing:
+- **Injection has two tiers.** REJECT for patterns with no legitimate
+  clinical reading; SANITIZE for role markers where a real question may
+  still be in there. Deliberately conservative on REJECT — an
+  administrator wrongly blocked from asking about a patient is a real cost.
+- **Toxicity blocks wholesale, not by clause.** A sentence telling a
+  patient to stop their medication cannot be made safe by deleting part
+  of it.
+- **An unscored answer is unverified, not passing.** If the RAG Triad
+  judge failed, `HallucinationChecker` blocks. "We couldn't check" must
+  never be silently equivalent to "it's fine".
+- **`patient_id` is never redacted.** It is the join key across the EHR,
+  reports and the vector store; masking it would make a log entry
+  impossible to correlate, defeating the point of logging it.
+
+### 2.5 Streamlit HITL Dashboard (`dashboard/`, :8501)
+
+Five pages via `st.navigation`, with the patient selection shared across
+them in session state.
+
+| Page | What it does |
+|---|---|
+| 1. Document Viewer | Tabbed Discharge/Lab/Bill, language badge, structured preview, pipeline trigger |
+| 2. Validation Report | Completeness bar, colour-coded findings table, risk badge, blocked indicator |
+| 3. HITL Corrections | **Dynamic elicitation form**, editable medication table, risk override, approval, re-run |
+| 4. RAG Q&A | Streaming answer, live injection indicator, source panel, RAG Triad metrics |
+| 5. Discharge Summary | Streamed summary, plain-English prescriptions, JSON/HTML/PDF export |
+
+Page 3 closes the Elicitation loop. The form is built from the JSON
+Schema the *server* sent, not from a hardcoded field list — that is what
+makes it a real Elicitation client rather than a form that happens to
+collect similar fields. All three outcomes (accept / decline / cancel)
+are reachable.
+
+Page 5 refuses to generate a patient-facing summary for a blocked
+discharge. Table 13 scopes the page to auto-approved cases, and producing
+a reassuring document for a case no clinician has cleared is precisely
+what the HITL guardrail exists to prevent.
+
+Pages 2 and 5 read `Data/reports/` directly, so a completed case can be
+reviewed with every agent stopped.
+
+### 2.6 LangFuse Observability (`observability/`, spec §7.2)
+
+Every requirement in §7.2 has a wired hook:
+
+| Requirement | Where |
+|---|---|
+| End-to-end trace per discharge case | `pipeline.discharge` root span; `trace_id_for()` maps the uuid onto an OTel trace id |
+| Per-agent spans | `@traced_agent(...)` on all six executors |
+| Per-tool-call spans | `mcp_client.call_tool()` — one place, all eight tools |
+| LLM generation events | `observe(as_type="generation")` + `record_generation()` |
+| Sampling events | `log_sampling_event()` in the Normalizer's callback |
+| Elicitation events | `log_elicitation_event()` in the Validator's callback |
+| Guardrail intervention spans | `log_guardrail_events()` flushes the manager's log |
+| Error spans | `log_error()` in every fallback branch |
+
+Three decisions worth knowing:
+
+- **Tracing is never load-bearing.** Every helper degrades to a no-op if
+  LangFuse is unconfigured, unreachable, or throwing. No caller depends
+  on a return value. An observability bug must not be able to block a
+  discharge — there are tests for both the unconfigured and the
+  actively-broken client.
+- **PII is masked inside the SDK.** The client is built with
+  `mask=` wired to `PIIRedactor`, so identifiers are stripped before
+  anything is exported. A call site that forgot to redact cannot leak
+  through it. `patient_id` is deliberately preserved so traces stay
+  correlatable.
+- **Streaming generations are recorded, not wrapped.** Holding an OTel
+  context across `yield` in an async generator lets it leak into whatever
+  the consumer does between tokens — or never close if the consumer
+  abandons the stream. `record_generation()` logs the completed
+  generation instead, trading latency capture for not corrupting the
+  surrounding trace.
+
+### 2.7 Cross-cutting pieces built along the way
 
 | Module | Why it exists |
 |---|---|
-| `agents/common/a2a_server.py` | Shared-secret middleware — was about to be copy-pasted 6× |
+| `agents/common/a2a_server.py` | Shared-secret middleware + `traced_agent` decorator |
 | `agents/common/a2a_client.py` | JSON-RPC + SSE A2A client, both call modes |
 | `agents/common/adk_runtime.py` | Routes ADK agents to Bedrock via LiteLLM instead of Gemini |
 | `agents/common/elicitation_store.py` | Cross-process HITL rendezvous (see §4) |
 | `agents/common/language_detect.py` | langdetect → LLM → `"en"`, never raises |
+| `agents/common/push_notifications.py` | Signed webhook POSTs (HMAC-SHA256) for completed cases |
+| `common/pdf_export.py` | PDF for summaries + audit reports (fpdf2, no system deps) |
+| `tests/conftest.py` | Puts both MCP server dirs on `sys.path` (they use flat sibling imports) |
 
 ---
 
 ## 3. Test coverage
 
-`python -m pytest tests/ -q` — **75 tests, no network, no AWS credentials.**
+`python -m pytest tests/ -q` — **219 tests, no network, no AWS credentials.**
 
-| File | Tests | Covers |
-|---|---|---|
-| `test_rules_loader.py` | 10 | rules.yaml loading, weights, risk tiers |
-| `test_normalizer_sampling.py` | 10 | **Real** MCP Sampling round trip over the SDK's in-memory transport |
-| `test_normalizer_nodes.py` | 7 | Abbreviation expansion edge cases |
-| `test_validator_decision.py` | 12 | Verdict precedence — every rule pinned separately |
-| `test_elicitation.py` | 12 | Store lifecycle + all three elicitation outcomes + timeout |
-| `test_orchestrator_and_rag.py` | 24 | Pipeline sequencing, guardrail, chunking, grounding gate, re-ranking |
+| File | Covers |
+|---|---|
+| `test_rules_loader.py` | rules.yaml loading, weights, risk tiers |
+| `test_normalizer_sampling.py` | **Real** MCP Sampling round trip over the SDK's in-memory transport |
+| `test_normalizer_nodes.py` | Abbreviation expansion edge cases |
+| `test_validator_decision.py` | Verdict precedence — every rule pinned separately |
+| `test_elicitation.py` | Store lifecycle + all three elicitation outcomes + timeout |
+| `test_orchestrator_and_rag.py` | Pipeline sequencing, guardrail, chunking, grounding gate, re-ranking |
+| `test_guardrails.py` | All five guardrails, including false-positive cases |
+| `test_pdf_export.py` | PDF rendering, Latin-1/Unicode encoding, page wrapping |
+| `test_observability.py` | No-op when disabled, survival when the client is broken, trace identity, PII masking |
+| `test_push_and_watcher_state.py` | HMAC signing/verification, processed-file ledger |
+| `test_imports.py` | Every runnable entry point imports and builds |
+| `test_per_patient_index.py` | Index isolation, exact top-k, mandatory patient scope, lifecycle |
+
+`test_imports.py` exists because of a real miss: `record_generation` was
+used by `agents/rag_agent/agent.py` but never exported from
+`observability/__init__`, and the whole suite stayed green because no
+test imported that module — the RAG tests import `rag_agent.roles`, not
+`rag_agent.agent`. It only surfaced when starting the server by hand. A
+suite that never imports what you actually run cannot tell you what you
+actually run is broken.
+
+The guardrail tests deliberately cover **both** failure directions:
+letting something through that should be caught, *and* blocking
+something legitimate. The second is easy to forget and, in a hospital
+tool, is a real cost — hence explicit cases like "Ignore the abnormal
+potassium — was anything else flagged?" which contains "ignore" but is a
+genuine clinical question and must not be rejected.
 
 The sampling test is worth calling out: it mounts the **real**
 `medical_lang_bridge_tool` on a **real** FastMCP server and connects a
@@ -163,12 +309,19 @@ The sampling test is worth calling out: it mounts the **real**
 is stubbed. It is a genuine protocol test, not an assertion about mocks.
 
 **Also verified against reality:**
-- FAISS index builds over the real corpus — 12 documents, 78 chunks
-- Retrieval is cross-lingual: an English question about the penicillin
-  allergy correctly surfaces the *German* P1016 document
+- Per-patient FAISS indexes build over the real corpus — 6 patients,
+  12 documents, 78 chunks
+- Index isolation holds: every index contains only its own patient's
+  chunks, and the penicillin-allergy question scoped to P1019 returns
+  only P1019 (a shared index used to surface P1016's German document)
+- Retrieval is cross-lingual within a patient: an English question about
+  the penicillin allergy correctly surfaces P1016's *German* document
 - The grounding gate works: "What is the capital of France?" scores 0.178,
   below the 0.25 threshold, so it returns the spec's exact refusal string
 - All 8 test documents parse through the real harvester
+- The Streamlit dashboard boots and serves HTTP 200 with a clean log
+- PDF export produces valid `%PDF` output for Spanish, German and Hindi
+  patient names
 
 **Not yet verified:** any live end-to-end run. No `.env` with AWS
 credentials exists, so no agent has been started against real Bedrock. Live
@@ -209,6 +362,12 @@ retrieval score, so an out-of-context question returns the spec's exact
 refusal string without the model ever seeing irrelevant context it could
 confabulate from.
 
+**"No patient selected" is reported separately from "not in the records".**
+Both end the query, but the first is something the user can fix and the
+second is a fact about the record. Collapsing them into the one refusal
+string would tell a reviewer their patient has no data when they simply
+hadn't chosen one.
+
 **Normalizer touches Resources.** Spec Table 6 lists it as
 "Tools + Sampling + Prompts". It also reads
 `resource://medical-abbreviations` for the deterministic expansion pass.
@@ -219,57 +378,46 @@ scanned handwritten Spanish report. A `.docx` covers the missing document
 format from §9's stack table and is honestly reproducible; generating a
 convincing handwritten scan was not.
 
+**Guardrails are pattern-based, not model-based.** A classifier would
+catch more paraphrases, but would make "why was this blocked?"
+unanswerable. In a clinical audit trail an explainable filter beats a
+slightly more sensitive one.
+
+**The hallucination threshold comes from `rules.yaml`, not Table 12.**
+Table 12 quotes 0.7; `rules.yaml` ships `rag_groundedness_min: 0.75`,
+which is stricter. Config wins — the entire point of `rules.yaml` is that
+thresholds move without a code change.
+
+**PDF uses fpdf2, not WeasyPrint.** WeasyPrint gives better HTML fidelity
+but needs GTK on Windows. For a document that is headings and paragraphs,
+a pure-Python renderer with no system dependency is the better trade.
+Consequence: fpdf2's core fonts are Latin-1 only, so `latin1_safe()`
+transliterates on the way in — Western European accents survive intact,
+non-Latin scripts degrade rather than raising mid-render.
+
 ---
 
 ## 5. What remains
 
-### 5.1 Streamlit HITL Dashboard — :8501, spec §8 · *not started*
+Construction is finished. Everything below is verification against live
+infrastructure, or a judgement call left open deliberately.
 
-Five pages. The backend each one needs already exists.
+### 5.1 Not yet verified live
 
-| Page | Needs | Backend ready? |
-|---|---|---|
-| 1. Document Viewer | Patient selector, tabbed docs, language badge, process trigger | Yes — `run_discharge_pipeline()` |
-| 2. Validation Report | Completeness score, findings table, risk badge, blocked indicator | Yes — `Data/reports/{id}_report.json` |
-| 3. HITL Corrections | `st.data_editor` med table, **dynamic elicitation form**, approval decision | Yes — `elicitation_store.list_pending()` / `.respond()` |
-| 4. RAG Q&A | Streaming answer, sources panel, RAG Triad metrics | Yes — stream `:8105` |
-| 5. Discharge Summary | Streamed summary, export JSON/HTML/PDF | Partly — PDF export missing |
-
-Page 3 is the one that closes the Elicitation loop: read pending requests,
-render a form from each request's JSON Schema, write back accept/decline/
-cancel. The store API is designed for exactly this and is already tested.
-
-### 5.2 RAI Guardrails — spec §7.1 · *1 of 5 done*
-
-| Guardrail | Status |
+| Gap | Why it matters |
 |---|---|
-| `GuardrailManager` (HITL escalation) | **Done** — `pipeline.guardrail_manager()` |
-| `PIIRedactor` | Not started |
-| `HallucinationChecker` | Half done — `rag_triad_score()` produces faithfulness; the <0.7 block-and-regenerate path is missing |
-| `PromptInjectionGuard` | Not started |
-| `ToxicityFilter` | Not started |
+| **No live end-to-end run** | Every result so far is offline. Nothing has touched real Bedrock, and no agent has been started against another agent over A2A. This is the highest-value next step |
+| **LangFuse never exercised against a real project** | The instrumentation is proven to no-op safely and to survive a broken client, but no span has actually landed in a LangFuse UI. Needs real keys |
+| **Push notifications never delivered** | Signing/verification is tested; no webhook has received one. Point `PUSH_NOTIFICATION_URL` at any request-bin to confirm |
+| **Tesseract not installed** | P1023's `.png` OCR path is the one document format never exercised |
 
-Intended shape: a `guardrails/` package imported as decorators at each MCP
-tool entry point and LLM call site.
+### 5.2 Open judgement calls
 
-### 5.3 LangFuse Observability — spec §7.2 · *not started*
-
-`trace_id` already threads through every A2A call, so the hard part is done.
-Still needed: per-agent spans, per-tool-call spans, LLM generation events
-with token counts, sampling events, elicitation events, guardrail spans, and
-error spans.
-
-### 5.4 Smaller gaps
-
-| Gap | Impact | Notes |
-|---|---|---|
-| **`mark_processed()` never called** | Watcher re-reports the same files forever | Defined in `tools_watcher.py:49`, zero callers. Needs a call after successful extraction |
-| **PDF report export** | §2.5 asks for JSON + HTML/**PDF**; only JSON + HTML exist | Add WeasyPrint/wkhtmltopdf over the existing HTML |
-| **A2A Push Notifications** | Spec §5 lists them | All cards declare `push_notifications=False` |
-| **Dual-MCP for most agents** | §4 says agents connect to both servers; only the RAG agent does | Others only need the primary; worth a defensible note or a second client |
-| **Secondary server underused** | `calculate_risk_score` duplicates the Reporter's local scoring | Wire it in as a cross-check, or document as intentional |
-| **Tesseract not installed** | P1023's `.png` OCR path untested | Install the Tesseract binary |
-| **No live end-to-end run** | Nothing has run against real Bedrock | Needs `.env` credentials |
+| Item | Position |
+|---|---|
+| **Dual-MCP for most agents** | §4 says agents connect to both servers; only the RAG agent does. The others have no use for the analytics tools. Either wire a second client for show, or defend it — this doc takes the second position |
+| **Secondary server underused** | `calculate_risk_score` duplicates the Reporter's local scoring. Wiring it as a cross-check would demonstrate multi-server calls in the validation path |
+| **Monitor's A2A path skips the LLM** | Deliberate (see §4). Flag if graders want ADK in the machine-to-machine path too — `use_llm: true` already does this |
 
 ---
 
@@ -297,11 +445,15 @@ plus `AGENT_AUTH_TOKEN`.
 
 ## 7. Suggested order for the remainder
 
-1. **Streamlit dashboard** — highest visible value, and it closes the
-   Elicitation loop that is currently only half-demonstrable.
-2. **RAI guardrails** — self-contained, testable offline, four small modules.
-3. **LangFuse** — last, because instrumenting spans touches every call site
-   and is easiest once those signatures have stopped moving.
-4. **Small gaps** — `mark_processed`, PDF export, push notifications.
+1. **Create a venv and install** (see §6) — before anything else.
+2. **Fill in `.env`** with AWS credentials and an `AGENT_AUTH_TOKEN`.
+3. **A live end-to-end run.** Start the services in the order in
+   `imp_command.txt`, then run `P1019` (clean), `P1016` (allergy
+   contradiction → blocked) and `P1015` (Hindi → translation) from the
+   dashboard. This is the step most likely to surface an integration
+   problem that offline testing cannot.
+4. **Add LangFuse keys** and confirm one case produces a single trace
+   containing agent, tool, generation, sampling and guardrail spans.
+5. **Decide the open judgement calls** in §5.2.
 
 See `imp_command.txt` for start order and test commands.

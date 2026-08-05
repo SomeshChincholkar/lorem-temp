@@ -36,6 +36,6 @@ AGENT_CARD = AgentCard(
     version="1.0.0",
     default_input_modes=["application/json"],
     default_output_modes=["application/json", "text/plain"],
-    capabilities=AgentCapabilities(streaming=True, push_notifications=False),
+    capabilities=AgentCapabilities(streaming=True, push_notifications=True),
     skills=[SUMMARY_SKILL],
 )

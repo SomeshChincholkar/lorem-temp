@@ -17,6 +17,7 @@ class ValidatorState(TypedDict, total=False):
     # Extractor output, one dict per document type (Table 3 shape).
     extracted_discharge: dict
     extracted_bill: dict
+    extracted_lab: dict
 
     # Normalizer output, used for the low_translation_confidence weight.
     translation_confidence: Optional[float]

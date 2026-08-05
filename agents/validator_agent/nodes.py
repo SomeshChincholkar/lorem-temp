@@ -16,6 +16,7 @@ MCP primitives exercised here (spec Table 6: Tools + Elicitation + Resources):
 import json
 
 from agents.common.mcp_client import call_tool, read_resource_text
+from observability import log_error
 
 from .elicitation import make_elicitation_callback
 from .state import ValidatorState
@@ -50,11 +51,19 @@ async def node_completeness_check(state: ValidatorState) -> ValidatorState:
                 "extracted_fields": state.get("extracted_discharge") or {},
             },
             elicitation_callback=callback,
+            trace_id=state.get("trace_id"),
         )
     except Exception as exc:  # noqa: BLE001
         state["error"] = f"Rules Engine tool call failed: {exc}"
+        # Fail closed: an unverifiable record must not read as complete.
         state["completeness_result"] = {"status": "blocked", "unresolved_fields": []}
         state["completeness_gaps"] = dict(NO_GAPS)
+        log_error(
+            "mcp.tool.rules_engine.failed",
+            exc,
+            trace_seed=state.get("trace_id"),
+            fallback_action="completeness marked blocked (fail closed)",
+        )
         return state
 
     state["completeness_result"] = result
@@ -98,16 +107,25 @@ async def node_ehr_cross_validate(state: ValidatorState) -> ValidatorState:
                 "extracted_discharge": state.get("extracted_discharge") or {},
                 "extracted_bill": state.get("extracted_bill") or {},
             },
+            trace_id=state.get("trace_id"),
         )
     except Exception as exc:  # noqa: BLE001
         state["error"] = f"EHR validation tool call failed: {exc}"
         state["ehr_findings"] = []
+        log_error(
+            "mcp.tool.ehr_validation.failed",
+            exc,
+            trace_seed=state.get("trace_id"),
+            fallback_action="no findings recorded; validation continues to report",
+        )
         return state
 
     state["ehr_findings"] = findings if isinstance(findings, list) else []
 
     try:
-        policies = await read_resource_text("resource://clinical-rules/cross-validation")
+        policies = await read_resource_text(
+            "resource://clinical-rules/cross-validation", trace_id=state.get("trace_id")
+        )
         state["cross_validation_policies"] = json.loads(policies)
     except Exception:
         # Audit metadata only -- never fail validation because the
@@ -126,6 +144,7 @@ async def node_report(state: ValidatorState) -> ValidatorState:
     all_inputs = {
         "extracted_discharge": state.get("extracted_discharge") or {},
         "extracted_bill": state.get("extracted_bill") or {},
+        "extracted_lab": state.get("extracted_lab") or {},
         "completeness_gaps": state.get("completeness_gaps") or dict(NO_GAPS),
         "ehr_findings": state.get("ehr_findings") or [],
         "translation_confidence": state.get("translation_confidence"),
@@ -135,10 +154,17 @@ async def node_report(state: ValidatorState) -> ValidatorState:
         state["report"] = await call_tool(
             "clinical_insight_reporter_tool",
             {"patient_id": state["patient_id"], "all_inputs": all_inputs},
+            trace_id=state.get("trace_id"),
         )
     except Exception as exc:  # noqa: BLE001
         state["error"] = f"Reporter tool call failed: {exc}"
         state["report"] = {}
+        log_error(
+            "mcp.tool.reporter.failed",
+            exc,
+            trace_seed=state.get("trace_id"),
+            fallback_action="empty report; decide() will not auto-approve",
+        )
 
     return state
 

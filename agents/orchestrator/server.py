@@ -68,16 +68,20 @@ async def ui_stream_summary(patient_id: str):
             yield text
 
 
-async def ui_stream_qa(question: str, patient_filter: str):
+async def ui_stream_qa(question: str, patient_id: str):
     """Streams a grounded answer token by token from :8105."""
     question = (question or "").strip()
     if not question:
         yield "Ask a question first."
         return
 
-    payload = {"question": question}
-    if (patient_filter or "").strip():
-        payload["patient_filter"] = patient_filter.strip()
+    # Records are indexed per patient, so this is required, not a filter.
+    patient_id = (patient_id or "").strip()
+    if not patient_id:
+        yield "Select a patient first — answers come from one patient's index."
+        return
+
+    payload = {"question": question, "patient_id": patient_id}
 
     text = ""
     async for event in send_message_streaming("rag", payload):
@@ -138,10 +142,15 @@ def build_ui():
         with gr.Tab("Clinical Q&A (streaming)"):
             question_input = gr.Textbox(
                 label="Question",
-                value="What medications was P1019 discharged on?",
+                value="What medications was this patient discharged on?",
                 lines=2,
             )
-            qa_patient = gr.Textbox(label="Restrict to patient ID (optional)", value="")
+            qa_patient = gr.Dropdown(
+                EXAMPLE_PATIENTS,
+                label="Patient (required)",
+                value=EXAMPLE_PATIENTS[0],
+                info="Each patient has their own index — answers never cross patients.",
+            )
             qa_button = gr.Button("Ask", variant="primary")
             qa_output = gr.Markdown()
             qa_button.click(

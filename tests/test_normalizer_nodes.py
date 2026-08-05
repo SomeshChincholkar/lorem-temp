@@ -29,9 +29,16 @@ ABBREVIATIONS = {
 
 @pytest.fixture
 def abbrev_resource(monkeypatch):
-    """Serves a fixed abbreviation map in place of the MCP resource."""
+    """
+    Serves a fixed abbreviation map in place of the MCP resource.
 
-    async def fake_read_resource_text(uri):
+    Signature must mirror the real read_resource_text, including the
+    trace_id keyword -- node_normalize_abbrev swallows exceptions from
+    this call, so a stale fake would fail silently as "no abbreviations
+    found" rather than as an error.
+    """
+
+    async def fake_read_resource_text(uri, url=None, trace_id=None):
         assert uri == "resource://medical-abbreviations"
         return json.dumps(ABBREVIATIONS)
 
@@ -120,7 +127,7 @@ async def test_unreachable_resource_passes_text_through(monkeypatch):
     returning -- degrade, don't fail the run.
     """
 
-    async def boom(uri):
+    async def boom(uri, url=None, trace_id=None):
         raise RuntimeError("resource server unreachable")
 
     monkeypatch.setattr(nodes_module, "read_resource_text", boom)

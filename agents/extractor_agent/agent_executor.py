@@ -22,12 +22,15 @@ from a2a.server.tasks import TaskUpdater
 from a2a.types import DataPart, Part, TaskState
 from a2a.utils import get_data_parts, new_agent_text_message, new_task
 
+from agents.common.a2a_server import traced_agent
+
 from .graph import extractor_app
 
 
 class ExtractorAgentExecutor(AgentExecutor):
     """AgentExecutor implementation for the Clinical Extractor Agent."""
 
+    @traced_agent("extractor")
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         task = context.current_task or new_task(context.message)
         if not context.current_task:

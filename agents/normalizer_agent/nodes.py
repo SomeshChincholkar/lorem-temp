@@ -19,6 +19,7 @@ import re
 from agents.common.language_detect import detect_language
 from agents.common.mcp_client import call_tool, get_prompt_text, read_resource_text
 from common.rules_loader import load_rules
+from observability import log_error
 
 from .sampling import make_sampling_callback
 from .state import NormalizerState
@@ -63,6 +64,7 @@ async def node_harvest(state: NormalizerState) -> NormalizerState:
     result = await call_tool(
         "clinical_data_harvester_tool",
         {"patient_id": state["patient_id"], "doc_type": harvester_doc_type},
+        trace_id=state.get("trace_id"),
     )
     state["raw_text"] = result["raw_text"]
     return state
@@ -93,6 +95,7 @@ async def node_fetch_prompt(state: NormalizerState) -> NormalizerState:
         state["normalization_prompt"] = await get_prompt_text(
             "abbreviation-normalization-prompt",
             {"source_language": state.get("source_language", "en")},
+            trace_id=state.get("trace_id"),
         )
     except Exception as exc:  # noqa: BLE001
         # Non-fatal: the Lang Bridge tool's own sampling message already
@@ -100,6 +103,12 @@ async def node_fetch_prompt(state: NormalizerState) -> NormalizerState:
         # costs quality, not correctness.
         state["normalization_prompt"] = ""
         state["error"] = f"Could not fetch normalization prompt: {exc}"
+        log_error(
+            "mcp.prompt.abbreviation_normalization.failed",
+            exc,
+            trace_seed=state.get("trace_id"),
+            fallback_action="proceeding without server-authored prompt",
+        )
     return state
 
 
@@ -124,19 +133,29 @@ async def node_translate(state: NormalizerState) -> NormalizerState:
         state["model_used"] = None
         return state
 
-    callback = make_sampling_callback(state.get("normalization_prompt") or None)
+    trace_id = state.get("trace_id")
+    callback = make_sampling_callback(
+        state.get("normalization_prompt") or None, trace_id=trace_id
+    )
 
     try:
         result = await call_tool(
             "medical_lang_bridge_tool",
             {"text": raw_text, "source_language": state.get("source_language", "en")},
             sampling_callback=callback,
+            trace_id=trace_id,
         )
     except Exception as exc:  # noqa: BLE001
         state["error"] = f"Lang Bridge tool call failed: {exc}"
         state["translated_text"] = ""
         state["confidence"] = 0.0
         state["model_used"] = None
+        log_error(
+            "mcp.tool.medical_lang_bridge.failed",
+            exc,
+            trace_seed=trace_id,
+            fallback_action="empty translation, confidence 0.0 (trips low-confidence guardrail)",
+        )
         return state
 
     state["translated_text"] = result.get("translated_text", "")
@@ -167,7 +186,9 @@ async def node_normalize_abbrev(state: NormalizerState) -> NormalizerState:
         return state
 
     try:
-        abbrev_json = await read_resource_text("resource://medical-abbreviations")
+        abbrev_json = await read_resource_text(
+            "resource://medical-abbreviations", trace_id=state.get("trace_id")
+        )
         abbreviations = json.loads(abbrev_json)
     except Exception:
         # Resource unreachable or malformed -- pass the LLM's text

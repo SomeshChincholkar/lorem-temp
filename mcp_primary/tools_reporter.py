@@ -104,6 +104,7 @@ def build_json_report(patient_id: str, all_inputs: dict) -> dict:
     {
         "extracted_discharge": dict,   # Table 3 discharge_report fields
         "extracted_bill": dict,        # Table 3 bill fields
+        "extracted_lab": dict,         # Table 3 lab_report fields
         "completeness_gaps": {"missing_blocking": [...], "missing_nonblocking": [...]},
         "ehr_findings": [{rule_id, severity, triggered, evidence, action}, ...],
         "translation_confidence": float | None,
@@ -122,9 +123,27 @@ def build_json_report(patient_id: str, all_inputs: dict) -> dict:
         "ehr_findings": [...],
         "translation_confidence": float | None,
         "rules_version": str (sha256 of rules.yaml),
+        "discharge_diagnosis": str | None,
+        "follow_up_instructions": str | None,
+        "extracted_discharge": dict,   # <- persisted, see below
+        "extracted_bill": dict,
+        "extracted_lab": dict,
     }
+
+    The three extracted_* dicts are persisted, not just consumed for
+    scoring. Everything downstream reads this file and nothing else:
+    the Summary Generator builds its medicines / test results / bill
+    sections from them, and the dashboard's editable medication tables
+    read extracted_discharge["medications"]. Omitting them left those
+    sections and tables silently empty -- the summary would describe a
+    discharge with no medications in it.
+
+    They are the LLM-extracted Table 3 fields, not the raw source files,
+    so they carry no presentation boilerplate and stay compact.
     """
-    extracted_discharge = all_inputs.get("extracted_discharge", {})
+    extracted_discharge = all_inputs.get("extracted_discharge") or {}
+    extracted_bill = all_inputs.get("extracted_bill") or {}
+    extracted_lab = all_inputs.get("extracted_lab") or {}
     completeness_gaps = all_inputs.get("completeness_gaps", {"missing_blocking": [], "missing_nonblocking": []})
     ehr_findings = all_inputs.get("ehr_findings", [])
     translation_confidence = all_inputs.get("translation_confidence")
@@ -150,6 +169,9 @@ def build_json_report(patient_id: str, all_inputs: dict) -> dict:
         "discharge_diagnosis": extracted_discharge.get("discharge_diagnosis"),
         "follow_up_instructions": extracted_discharge.get("discharge_instructions")
         or extracted_discharge.get("follow_up_appointments"),
+        "extracted_discharge": extracted_discharge,
+        "extracted_bill": extracted_bill,
+        "extracted_lab": extracted_lab,
     }
 
 
@@ -219,9 +241,22 @@ async def clinical_insight_reporter_tool(ctx: Context, patient_id: str, all_inpu
     _write_file(json_path, json.dumps(report, indent=2))
     _write_file(html_path, html)
 
+    # Spec 2.5 asks for JSON (system consumption) + HTML/PDF
+    # (clinician-friendly). PDF generation is best-effort: a missing
+    # fpdf2 or an encoding edge case must not cost the caller the JSON
+    # and HTML reports that were already written successfully.
+    pdf_path = None
+    try:
+        from common.pdf_export import write_report_pdf
+
+        pdf_path = str(write_report_pdf(report, output_dir=REPORTS_DIR))
+    except Exception:
+        pdf_path = None
+
     return {
         "json_path": str(json_path),
         "html_path": str(html_path),
+        "pdf_path": pdf_path,
         "risk_level": report["risk_level"],
         "recommendation": report["recommendation"],
         "discharge_blocked": report["discharge_blocked"],
